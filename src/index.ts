@@ -92,13 +92,23 @@ app.listen(PORT, () => {
 });
 
 mongoose.Promise = Promise;
-mongoose.connect(process.env.MONGO_URL!, {
+
+// Check if MONGO_URL is set
+if (!process.env.MONGO_URL) {
+  console.error('MONGO_URL environment variable is not set');
+  process.exit(1);
+}
+
+mongoose.connect(process.env.MONGO_URL, {
+  retryWrites: true,
+  w: 'majority',
   ssl: true,
   tls: true,
   tlsAllowInvalidCertificates: true,
-  retryWrites: true,
-  w: 'majority',
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
 });
+
 mongoose.connection.on('error', (error: Error) => console.log(error));
 mongoose.connection.once('open', () => {
   console.log('Connected to MongoDB successfully!');
