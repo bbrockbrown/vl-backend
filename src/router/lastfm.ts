@@ -2,10 +2,9 @@ import express from 'express';
 
 import { deleteUser, getAllUsers, updateUser } from '../controllers/users';
 import { isAuthenticated, isOwner } from '../middleware';
+import { lastfmCallback } from '../controllers/lastfm';
 
 export default (router: express.Router) => {
-  // User routes
-  router.get('/users', isAuthenticated, getAllUsers);
-  router.delete('/users/:id', isAuthenticated, isOwner, deleteUser);
-  router.patch('/users/:id', isAuthenticated, isOwner, updateUser);
+  // last.fm routes
+  router.get('/lastfm/callback', lastfmCallback);
 }

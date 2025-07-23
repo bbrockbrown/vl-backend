@@ -65,11 +65,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// app.use("/auth", authRoutes);
-// app.use("/", generalRoutes);
-// app.use("/user", userRoutes);
-// app.use("/admin", adminRoutes);
-
 app.get('/', (_req, res) => {
   console.log("RECEIVED GET /");
   res.send({
@@ -97,7 +92,13 @@ app.listen(PORT, () => {
 });
 
 mongoose.Promise = Promise;
-mongoose.connect(process.env.MONGO_URL!);
+mongoose.connect(process.env.MONGO_URL!, {
+  ssl: true,
+  tls: true,
+  tlsAllowInvalidCertificates: true,
+  retryWrites: true,
+  w: 'majority',
+});
 mongoose.connection.on('error', (error: Error) => console.log(error));
 mongoose.connection.once('open', () => {
   console.log('Connected to MongoDB successfully!');

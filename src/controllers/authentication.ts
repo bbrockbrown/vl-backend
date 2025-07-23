@@ -28,11 +28,13 @@ export const login = async (req: express.Request, res: express.Response) => {
 
     await user.save();
 
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieDomain = process.env.COOKIE_DOMAIN!;
     res.cookie(process.env.COOKIE_NAME!, user.authentication.sessionToken, {
-      domain: 'localhost',  // where cookie is sent to
+      domain: isProduction ? cookieDomain : 'localhost',  // where cookie is sent to
       path: '/',            // scope of cookie for security 
       httpOnly: true,       // do not allow JS to access cookie
-      secure: process.env.NODE_ENV === 'production', // will only send cookie if HTTPS (ONLY TRUE IN PROD)
+      secure: isProduction, // will only send cookie if HTTPS (ONLY TRUE IN PROD)
       sameSite: 'strict',   // cookie is not sent with cross-site requests
     });
 
@@ -41,7 +43,7 @@ export const login = async (req: express.Request, res: express.Response) => {
     console.error(error);
     res.sendStatus(400);
   }
-}
+};
 
 export const register = async (req: express.Request, res: express.Response) => {
   try {
@@ -76,4 +78,4 @@ export const register = async (req: express.Request, res: express.Response) => {
     console.log(error);
     return res.sendStatus(400);
   }
-}
+};
