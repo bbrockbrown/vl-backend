@@ -59,8 +59,24 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
 
     // With access token, we can now perform operations related to user data
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
+  
+    // Calculate expiry time
+    const expiresAt = new Date(Date.now() + expires_in * 1000);
 
-    // TODO: store tokens in database or session
+    // Find the user that just allowed Spotify auth (from middleware)
+    const user = req.identity;
+
+    if (!user) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
+    // Update user's Spotify tokens
+    user.spotifyAccessToken = access_token;
+    user.spotifyRefreshToken = refresh_token;
+    user.spotifyTokenExpiresAt = expiresAt;
+
+    // Save the user info
+    await user.save();
 
     // Redirect to frontend
     res.redirect(`${process.env.FRONTEND_URL}/dashboard?success=true`);
@@ -128,8 +144,18 @@ export const refreshSpotifyToken = async (req: express.Request, res: express.Res
 
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
 
-    // TODO: Update stored tokens in database
-    // If new refresh_token is provided, update it too
+    // Update stored tokens in database
+    const user = req.identity;
+    if (!user) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    user.spotifyAccessToken = access_token;
+    if (refresh_token) {
+      user.spotifyRefreshToken = refresh_token;
+    }
+    user.spotifyTokenExpiresAt = new Date(Date.now() + expires_in * 1000);
+    await user.save();
 
     res.json({
       access_token,

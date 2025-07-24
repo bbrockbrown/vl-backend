@@ -8,12 +8,6 @@ import compression from "compression";
 import router from './router';
 import session from 'express-session';
 
-declare module 'express-session' {
-  interface SessionData {
-    spotifyState?: string;
-  }
-}
-
 dotenv.config();
 
 const app = express();

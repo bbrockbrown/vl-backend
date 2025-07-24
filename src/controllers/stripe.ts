@@ -85,7 +85,7 @@ export const handleWebhook = async (req: express.Request, res: express.Response)
   }
 };
 
-// Webhook event handlers
+// TODO: update webhook handlers to handle actual events occurring
 async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
   console.log('Checkout session completed:', session.id);
   

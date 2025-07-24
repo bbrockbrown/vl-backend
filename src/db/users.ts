@@ -6,6 +6,7 @@ const UserSchema = new mongoose.Schema({
   spotifyId: { type: String, unique: true },
   spotifyAccessToken: { type: String },
   spotifyRefreshToken: { type: String },
+  spotifyTokenExpiresAt: { type: Date },
   premium: { type: Boolean, default: false },
   authentication: {
     password: { type: String, required: true, select: false },
