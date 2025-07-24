@@ -42,10 +42,30 @@ const corsOptions = {
 
 // Configurations
 app.use(cors(corsOptions));
-app.use(express.json());
 app.use(cookieParser());
 app.use(compression());
-app.use(bodyParser.json());
+
+// JSON parsing middleware - exclude webhook routes
+app.use((req, res, next) => {
+  if (req.path === '/stripe/webhook') {
+    // Skip JSON parsing for webhook routes
+    next();
+  } else {
+    // Parse JSON for all other routes
+    express.json()(req, res, next);
+  }
+});
+
+// Legacy bodyParser for backward compatibility
+app.use((req, res, next) => {
+  if (req.path === '/stripe/webhook') {
+    // Skip body parsing for webhook routes
+    next();
+  } else {
+    // Parse JSON for all other routes
+    bodyParser.json()(req, res, next);
+  }
+});
 
 // Session middleware
 app.use(session({
