@@ -1,11 +1,13 @@
 import crypto from 'crypto';
 
-const SECRET = process.env.SECRET || 'supercalifragilisticexpedalidocioussecret1234';
+const HASH_SECRET = process.env.HASH_SECRET!;
 
+// For password security and authentication
 export const random = () => crypto.randomBytes(128).toString('base64');
-export const authentication = (salt: string, password: string) => {
-  return crypto.createHmac('sha256', [salt, password].join('/')).update(SECRET).digest('hex');
-};
+export const authentication = (salt: string, password: string) =>
+  crypto.createHmac('sha256', [salt, password].join('/')).update(HASH_SECRET).digest('hex');
+
+// Random string to keep track of Spotify state for a user
 export const stringGenerator = (length: number) =>
   Array.from({ length }, () =>
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'.charAt(

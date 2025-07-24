@@ -1,8 +1,23 @@
 import express from 'express';
 import Stripe from 'stripe';
 
-let stripe: Stripe;
+import * as handlers from '../helpers/stripeHandlers';
 
+let stripe: Stripe;
+const stripeHandlers: Record<string, (data: any) => Promise<void>> = {
+  // Helper functions depending on Stripe event
+  'checkout.session.completed': (data: Stripe.Checkout.Session) =>
+    handlers.handleCheckoutSessionCompleted(data),
+  'payment_indent.created': (data: Stripe.PaymentIntent) =>
+    handlers.handlePaymentIntentCreated(data),
+  'payment_intent.succeeded': (data: Stripe.PaymentIntent) =>
+    handlers.handlePaymentIntentSucceeded(data),
+  'payment_intent.payment_failed': (data: Stripe.PaymentIntent) =>
+    handlers.handlePaymentIntentFailed(data),
+  'charge.succeeded': (data: Stripe.Charge) => handlers.handleChargeSucceeded(data),
+};
+
+// Returns Stripe object to create checkout sessions, etc.
 function getStripe(): Stripe {
   if (!stripe) {
     if (!process.env.STRIPE_SECRET_KEY) {
@@ -15,6 +30,7 @@ function getStripe(): Stripe {
   return stripe;
 }
 
+// Handles all webhook events
 export const handleWebhook = async (req: express.Request, res: express.Response) => {
   const sig = req.headers['stripe-signature'];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -31,53 +47,24 @@ export const handleWebhook = async (req: express.Request, res: express.Response)
     const rawBody = req.body;
     console.log('Webhook raw body type:', typeof rawBody);
     console.log('Webhook raw body length:', rawBody?.length);
-    
+
     event = getStripe().webhooks.constructEvent(rawBody, sig as string, endpointSecret);
-  } catch (err) {
-    console.error('Webhook signature verification failed:', err);
+  } catch (error) {
+    console.error('Webhook signature verification failed:', error);
     return res.status(400).json({ error: 'Invalid signature' });
   }
 
   console.log('Received webhook event:', event.type);
 
   try {
-    switch (event.type) {
-      case 'checkout.session.completed':
-        await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
-        break;
-      
-      case 'payment_intent.succeeded':
-        await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
-        break;
-      
-      case 'payment_intent.payment_failed':
-        await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent);
-        break;
-      
-      case 'customer.subscription.created':
-        await handleSubscriptionCreated(event.data.object as Stripe.Subscription);
-        break;
-      
-      case 'customer.subscription.updated':
-        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
-        break;
-      
-      case 'customer.subscription.deleted':
-        await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
-        break;
-      
-      case 'invoice.payment_succeeded':
-        await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
-        break;
-      
-      case 'invoice.payment_failed':
-        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
-        break;
-      
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
+    const handler = stripeHandlers[event.type as keyof typeof stripeHandlers];
+    if (handler) {
+      // keeps TS happy
+      console.log('Passing in', event.data.object, 'to event handler function');
+      await handler(event.data.object as any);
+    } else {
+      console.log(`Unhandled event type: ${event.type}`);
     }
-
     res.json({ received: true });
   } catch (error) {
     console.error('Error processing webhook:', error);
@@ -85,68 +72,109 @@ export const handleWebhook = async (req: express.Request, res: express.Response)
   }
 };
 
-// TODO: update webhook handlers to handle actual events occurring
-async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
-  console.log('Checkout session completed:', session.id);
-  
-  // Handle successful checkout completion
-  // You can access session.customer, session.subscription, session.payment_intent, etc.
-  
-  if (session.mode === 'subscription') {
-    console.log('Subscription created:', session.subscription);
-    // Handle subscription creation
-  } else if (session.mode === 'payment') {
-    console.log('Payment completed:', session.payment_intent);
-    // Handle one-time payment
+export const createCheckoutSession = async (req: express.Request, res: express.Response) => {
+  const { email, userId } = req.body;
+
+  // Request variable checks
+  if (!email || !userId) {
+    return res.status(400).json({ message: 'Invalid request for checkout session' });
   }
-}
 
-async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
-  console.log('Payment succeeded:', paymentIntent.id);
-  
-  // Handle successful payment
-  // Update user's subscription status, grant access to premium features, etc.
-}
+  try {
+    const isProduction = process.env.NODE_ENV === 'production';
+    // TODO: change the actual routing of the successURL
+    const successUrl = isProduction
+      ? `${process.env.FRONTEND_URL}}?stripe-success=true`
+      : `${process.env.FRONTEND_URL_DEV}}?stripe-success=true`;
+    const cancelUrl = isProduction
+      ? `${process.env.FRONTEND_URL}?stripe-success=false`
+      : `${process.env.FRONTEND_URL_DEV}}?stripe-success=false`;
 
-async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {
-  console.log('Payment failed:', paymentIntent.id);
-  
-  // Handle failed payment
-  // Notify user, update subscription status, etc.
-}
+    // Get stripe object
+    const stripe = getStripe();
+    // Create checkout session
+    const session = await stripe.checkout.sessions.create({
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      line_items: [
+        {
+          price: process.env.STRIPE_PRICE_ID,
+          quantity: 1,
+        },
+      ],
+      customer_email: email,
+      metadata: {
+        email: email,
+        user_id: userId,
+      },
+      mode: 'payment',
+    });
 
-async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
-  console.log('Subscription created:', subscription.id);
-  
-  // Handle new subscription
-  // Update user's subscription status in your database
-  // Grant access to premium features
-}
+    // Return checkoutURL and sessionID
+    return res
+      .status(200)
+      .json({
+        checkout_url: session.url,
+        session_id: session.id,
+      })
+      .end();
+  } catch (error: any) {
+    console.log('Error creating checkout session', error);
+    if (error.get('response')) {
+      // See if specific Stripe response
+      console.log('Stripe response', error.response);
+    }
+    return res.status(400).json({ error: 'Could not create checkout session' });
+  }
+};
 
-async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
-  console.log('Subscription updated:', subscription.id);
-  
-  // Handle subscription updates
-  // Update subscription status, plan changes, etc.
-}
+export const getPaymentStatus = async (req: express.Request, res: express.Response) => {
+  const { sessionId } = req.params;
 
-async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
-  console.log('Subscription deleted:', subscription.id);
-  
-  // Handle subscription cancellation
-  // Revoke premium access, update user status, etc.
-}
+  if (!sessionId) {
+    return res.status(400).json({ error: 'Session ID not provided' });
+  }
 
-async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
-  console.log('Invoice payment succeeded:', invoice.id);
-  
-  // Handle successful invoice payment
-  // Usually for recurring subscription payments
-}
+  try {
+    const stripe = getStripe();
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
-  console.log('Invoice payment failed:', invoice.id);
-  
-  // Handle failed invoice payment
-  // Notify user, update subscription status, etc.
-}
+    // Checkout closed, check payment status
+    if (session.status == 'complete') {
+      if (session.payment_status === 'paid') {
+        // User paid
+        return res.status(200).json({
+          session_status: 'complete',
+          payment_status: 'paid',
+        });
+      } else if (session.payment_status === 'unpaid') {
+        // User did not pay
+        return res.status(200).json({
+          session_status: 'complete',
+          payment_status: 'unpaid',
+        });
+      }
+    }
+    // User is still in checkout session
+    else if (session.status === 'open') {
+      return res.status(200).json({
+        session_status: 'open',
+        payment_status: 'unpaid',
+      });
+    }
+    // Checkout session no longer valid
+    else if (session.status === 'expired') {
+      return res.status(200).json({
+        session_status: 'expired',
+        payment_status: 'unpaid',
+      });
+    }
+    // session.status is null or undefined
+    else {
+      return res.status(418).json({ error: 'Teapot. Prob never returned #coffeelover' });
+    }
+  } catch (error) {
+    console.log('Error getting payment status');
+    return res.status(400).json({ error: 'Could not get payment status' });
+  }
+};
