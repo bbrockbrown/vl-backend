@@ -6,18 +6,19 @@ import bodyParser from 'body-parser';
 import mongoose from 'mongoose';
 import compression from "compression";
 import router from './router';
+import session from 'express-session';
+
+declare module 'express-session' {
+  interface SessionData {
+    spotifyState?: string;
+  }
+}
 
 dotenv.config();
 
-// Import routes & middleware
-// const authRoutes = require("./routes/authRoutes");
-// const generalRoutes = require("./routes/generalRoutes");
-// const userRoutes = require("./routes/therapistRoutes");
-// const adminRoutes = require("./routes/adminRoutes");
-
 const app = express();
 
-
+// Control what origins are allowed
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     const allowedOrigins = [
@@ -27,10 +28,10 @@ const corsOptions = {
     console.log("Request origin", origin);
     console.log("Allowed origins", allowedOrigins);
 
-    if (allowedOrigins.includes(origin) || !origin) {
-      callback(null, true);
+    if (allowedOrigins.includes(origin) || !origin) { // !origin ==> curl http://localhost:5050...
+      callback(null, true); // allow the request
     } else {
-      callback(new Error("Not allowed by CORS"));
+      callback(new Error("Not allowed by CORS")); // deny
     }
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -39,12 +40,26 @@ const corsOptions = {
   maxAge: 86400,
 };
 
+// Configurations
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 app.use(compression());
 app.use(bodyParser.json());
 
+// Session middleware
+app.use(session({
+  secret: process.env.SESSION_SECRET!,
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Runs whenever there is an error
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error("ERROR DETAILS", {
     message: err.message,
@@ -60,20 +75,16 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
+// URL and slash management
+// EX: URL//users///8494583854 ==> URL/users/8494583854
 app.use((req, res, next) => {
   req.url = req.url.replace(/\/+/g, "/");
   next();
 });
 
-app.get('/', (_req, res) => {
-  console.log("RECEIVED GET /");
-  res.send({
-    message: 'working'
-  });
-});
-
+// Check to see if working
 app.get("/health", (req, res) => {
-  res.status(200).json({ status: "OK "});
+  res.status(200).json({ status: "OK #working"});
 })
 
 if (process.env.NODE_ENV !== "production") {
@@ -84,6 +95,7 @@ if (process.env.NODE_ENV !== "production") {
   });
 }
 
+// PORT config
 const PORT = process.env.PORT || 5050;
 app.listen(PORT, () => {
   console.log(`SERVER LISTENING ON PORT ${PORT}`);
@@ -91,6 +103,7 @@ app.listen(PORT, () => {
   console.log(`FRONTEND URL: ${process.env.FRONTEND_URL}`);
 });
 
+// MongoDB Atlas config using mongoose
 mongoose.Promise = Promise;
 
 // Check if MONGO_URL is set
@@ -99,6 +112,7 @@ if (!process.env.MONGO_URL) {
   process.exit(1);
 }
 
+// TODO ==> figure out ssl issue with railway + mongoDB. 
 mongoose.connect(process.env.MONGO_URL, {
   retryWrites: true,
   w: 'majority',

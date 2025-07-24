@@ -1,6 +1,6 @@
-import { Request, Response } from 'express';
+import express from 'express';
 
-export const lastfmCallback = (req: Request, res: Response) => {
+export const lastfmCallback = (req: express.Request, res: express.Response) => {
   // Placeholder implementation
   res.json({ message: 'Last.fm callback received!' });
 }; 
