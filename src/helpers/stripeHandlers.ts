@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { updateUserById } from '../db/users';
 
 export async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
   console.log('Checkout session completed:', session.id);
@@ -15,8 +16,22 @@ export async function handlePaymentIntentCreated(paymentIntent: Stripe.PaymentIn
 export async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
   console.log('Payment Intent succeeded:', paymentIntent.id);
 
-  // Handle successful payment
-  // Update user's subscription status, grant access to premium features, etc.
+  // Get user info from metadata
+  const { email, userId } = paymentIntent.metadata;
+  console.log('paymentIntent metadata', paymentIntent.metadata);
+  if (!email || !userId) {
+    throw new Error('Did not get metadata from Stripe');
+  }
+
+  // Atomic update using updateUserById
+  await updateUserById(userId, {
+    premium: true,
+    'stripe.paymentIntentId': paymentIntent.id,
+    'stripe.paymentDate': new Date(),
+    'stripe.paymentAmount': paymentIntent.amount,
+    'stripe.paymentCurrency': paymentIntent.currency,
+  });
+  return;
 }
 
 export async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {

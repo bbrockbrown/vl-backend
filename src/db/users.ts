@@ -3,15 +3,26 @@ import mongoose from 'mongoose';
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true },
   email: { type: String, required: true },
-  spotifyId: { type: String, unique: true },
-  spotifyAccessToken: { type: String },
-  spotifyRefreshToken: { type: String },
-  spotifyTokenExpiresAt: { type: Date },
   premium: { type: Boolean, default: false },
+  
   authentication: {
     password: { type: String, required: true, select: false },
     salt: { type: String, select: false },
     sessionToken: { type: String, select: false },
+  },
+
+  stripe: {
+    customerId: { type: String },
+    paymentIntentId: { type: String },
+    paymentDate: { type: Date },
+    paymentAmount: { type: Number },
+    paymentCurrency: { type: String },
+  },
+
+  spotify: {
+    accessToken: { type: String },
+    refreshToken: { type: String },
+    tokenExpiresAt: { type: Date },
   },
 });
 

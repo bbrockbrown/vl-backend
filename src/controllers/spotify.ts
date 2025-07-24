@@ -71,9 +71,9 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
     }
 
     // Update user's Spotify tokens
-    user.spotifyAccessToken = access_token;
-    user.spotifyRefreshToken = refresh_token;
-    user.spotifyTokenExpiresAt = expiresAt;
+    user.spotify.accessToken = access_token;
+    user.spotify.refreshToken = refresh_token;
+    user.spotify.tokenExpiresAt = expiresAt;
 
     // Save the user info
     await user.save();
@@ -150,11 +150,11 @@ export const refreshSpotifyToken = async (req: express.Request, res: express.Res
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    user.spotifyAccessToken = access_token;
+    user.spotify.accessToken = access_token;
     if (refresh_token) {
-      user.spotifyRefreshToken = refresh_token;
+      user.spotify.refreshToken = refresh_token;
     }
-    user.spotifyTokenExpiresAt = new Date(Date.now() + expires_in * 1000);
+    user.spotify.tokenExpiresAt = new Date(Date.now() + expires_in * 1000);
     await user.save();
 
     res.json({
