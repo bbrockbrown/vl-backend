@@ -14,3 +14,6 @@ export const stringGenerator = (length: number) =>
       Math.floor(Math.random() * 62)
     )
   ).join('');
+
+export const getApiUrl = () =>
+  process.env.NODE_ENV === 'production' ? process.env.BACKEND_URL : process.env.BACKEND_URL_DEV;

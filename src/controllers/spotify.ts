@@ -1,8 +1,11 @@
 import express from 'express';
 import axios from 'axios';
 import { URLSearchParams } from 'url';
-import { stringGenerator } from '../helpers/index';
+import { getApiUrl, random, stringGenerator, authentication } from '../helpers/index';
 import querystring from 'querystring';
+import { createUser, getUserByEmail, getUserById } from '../db/users';
+
+const API_URL = getApiUrl();
 
 export const spotifyCallback = async (req: express.Request, res: express.Response) => {
   // Error checking for callback
@@ -26,15 +29,12 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
   }
 
   if (!code) {
-    return res.sendStatus(400);
+    return res.status(400).json({ error: 'Did not receive code from Spotify in callback' });
   }
 
   try {
     // Different routing based on prod vs dev
-    const isProduction = process.env.NODE_ENV === 'production';
-    const redirectUri = isProduction
-      ? `${process.env.BACKEND_URL!}/auth/spotify/callback`
-      : `${process.env.BACKEND_URL_DEV!}/auth/spotify/callback`;
+    const redirectUri = `${API_URL}/auth/spotify/callback`;
     const authOptions = {
       url: 'https://accounts.spotify.com/api/token',
       form: {
@@ -59,25 +59,72 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
 
     // With access token, we can now perform operations related to user data
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
-  
+
     // Calculate expiry time
     const expiresAt = new Date(Date.now() + expires_in * 1000);
 
-    // Find the user that just allowed Spotify auth (from middleware)
-    const user = req.identity;
+    const profileResponse = await fetch('https://api.spotify.com/v1/me', {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+      },
+    });
 
+    const profileData = await profileResponse.json();
+    const { email, id: spotifyId, display_name } = profileData;
+
+    // We have email, so create user
+    let user = await getUserByEmail(email);
     if (!user) {
-      return res.status(401).json({ error: "User not authenticated" });
+      // Confirmed user does NOT have an account
+      const newUser = await createUser({
+        email,
+        username: display_name || email,
+        spotify: {
+          accessToken: access_token,
+          refreshToken: refresh_token,
+          tokenExpiresAt: expiresAt,
+        },
+        authentication: {
+          password: '',
+          salt: random(),
+          sessionToken: '', // will be set below
+        },
+      });
+      user = await getUserById(newUser._id.toString());
+    } else {
+      // User has an account, update their tokens
+      if (!user.spotify) user.spotify = {}; // keeps TS happy
+      user.spotify.accessToken = access_token;
+      user.spotify.refreshToken = refresh_token;
+      user.spotify.tokenExpiresAt = expiresAt;
     }
 
-    // Update user's Spotify tokens
-    user.spotify.accessToken = access_token;
-    user.spotify.refreshToken = refresh_token;
-    user.spotify.tokenExpiresAt = expiresAt;
+    if (user) {
+      if (!user.authentication) {
+        user.authentication = {
+          password: '',
+          salt: random(),
+          sessionToken: '',
+        };
+      }
+      const salt = random();
+      user.authentication.sessionToken = authentication(salt, user._id.toString());
+      await user.save();
 
-    // Save the user info
-    await user.save();
+      // Set session token in session (for consistency)
+      req.session.sessionToken = user.authentication.sessionToken;
 
+      // Set HTTP-only cookie (matches login pattern)
+      const isProduction = process.env.NODE_ENV === 'production';
+      const cookieDomain = process.env.COOKIE_DOMAIN!;
+      res.cookie(process.env.COOKIE_NAME!, user.authentication.sessionToken, {
+        domain: isProduction ? cookieDomain : 'localhost',
+        path: '/',
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'strict',
+      });
+    }
     // Redirect to frontend
     res.redirect(`${process.env.FRONTEND_URL}/dashboard?success=true`);
   } catch (error) {
@@ -89,18 +136,13 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
 export const spotifyLogin = async (req: express.Request, res: express.Response) => {
   const state = stringGenerator(16);
   const scope = 'user-read-private user-read-email';
-  const isProduction = process.env.NODE_ENV === 'production';
+  const redirectUri = `${API_URL}/auth/spotify/callback`;
 
   req.session!.spotifyState = state;
 
   console.log('state', state);
-  console.log('isProduction', isProduction);
-  console.log(
-    'redirect_uri',
-    isProduction
-      ? `${process.env.BACKEND_URL!}/auth/spotify/callback`
-      : `${process.env.BACKEND_URL_DEV!}/auth/spotify/callback`
-  );
+  console.log('isProduction', process.env.NODE_ENV === 'production');
+  console.log('redirect_uri', redirectUri);
 
   res.redirect(
     'https://accounts.spotify.com/authorize?' +
@@ -108,9 +150,7 @@ export const spotifyLogin = async (req: express.Request, res: express.Response) 
         response_type: 'code',
         client_id: process.env.SPOTIFY_CLIENT_ID!,
         scope: scope,
-        redirect_uri: isProduction
-          ? `${process.env.BACKEND_URL!}/auth/spotify/callback`
-          : `${process.env.BACKEND_URL_DEV!}/auth/spotify/callback`,
+        redirect_uri: redirectUri,
         state: state,
       })
   );

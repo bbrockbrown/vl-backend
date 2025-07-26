@@ -3,8 +3,8 @@ import { spotifyLogin, spotifyCallback, refreshSpotifyToken } from '../controlle
 import { isAuthenticated } from '../middleware';
 
 export default (router: express.Router) => {
-  // Spotify OAuth routes
-  router.get('/auth/spotify/login', isAuthenticated, spotifyLogin);
-  router.get('/auth/spotify/callback', isAuthenticated, spotifyCallback);
+  // Spotify OAuth routes (no auth required - this IS the auth)
+  router.get('/auth/spotify/login', spotifyLogin);
+  router.get('/auth/spotify/callback', spotifyCallback);
   router.post('/auth/spotify/refresh-token', isAuthenticated, refreshSpotifyToken);
 };

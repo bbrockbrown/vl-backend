@@ -1,4 +1,25 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
+# Dependency directories
+node_modules/
 
+# TypeScript cache
+*.tsbuildinfo
+
+# dotenv environment variable files
 .env
-node_modules
+.env.*
+!.env.example
+
+# build / generate output
+dist
+
+# Vite logs files
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
