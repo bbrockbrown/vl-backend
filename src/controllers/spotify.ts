@@ -5,8 +5,6 @@ import { getApiUrl, random, stringGenerator, authentication } from '../helpers/i
 import querystring from 'querystring';
 import { createUser, getUserByEmail, getUserById } from '../db/users';
 
-const API_URL = getApiUrl();
-
 export const spotifyCallback = async (req: express.Request, res: express.Response) => {
   // Error checking for callback
   const error = req.query.error as string;
@@ -34,7 +32,7 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
 
   try {
     // Different routing based on prod vs dev
-    const redirectUri = `${API_URL}/auth/spotify/callback`;
+    const redirectUri = `${getApiUrl()}/auth/spotify/callback`;
     const authOptions = {
       url: 'https://accounts.spotify.com/api/token',
       form: {
@@ -85,9 +83,9 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
           tokenExpiresAt: expiresAt,
         },
         authentication: {
-          password: '',
+          password: 'temp',
           salt: random(),
-          sessionToken: '', // will be set below
+          sessionToken: 'temp', // will be set below
         },
       });
       user = await getUserById(newUser._id.toString());
@@ -126,17 +124,18 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
       });
     }
     // Redirect to frontend
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard?success=true`);
+    res.redirect(`${process.env.FRONTEND_URL}/quiz?success=true`);
   } catch (error) {
     console.log('Spotify callback error', error);
-    res.redirect(`${process.env.FRONTEND_URL}/login?error=spotify_auth_failed`);
+    res.redirect(`${process.env.FRONTEND_URL}/quiz?error=spotify_auth_failed`);
   }
 };
 
 export const spotifyLogin = async (req: express.Request, res: express.Response) => {
   const state = stringGenerator(16);
   const scope = 'user-read-private user-read-email user-read-recently-played user-top-read user-read-playback-state user-library-read playlist-read-private';
-  const redirectUri = `${API_URL}/auth/spotify/callback`;
+  const redirectUri = `${getApiUrl()}/auth/spotify/callback`;
+  console.log("BASE API URL", getApiUrl())
 
   req.session!.spotifyState = state;
 

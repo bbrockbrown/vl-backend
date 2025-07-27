@@ -46,11 +46,13 @@ async function fetchSpotifyData(user: any, endpoint: string, params: any = {}) {
   }
 }
 
-// Analyze quiz answers and correlate with Spotify data
+// Submit + analyze quiz answers and correlate with Spotify data
 export const analyzeQuizAnswers = async (req: express.Request, res: express.Response) => {
   try {
     const { answers } = req.body as { answers: QuizAnswer[] };
+    console.log("Received answers from frontend", answers);
     const user = req.identity;
+    console.log("User", user);
 
     if (!user) {
       return res.status(401).json({ error: 'User not authenticated' });

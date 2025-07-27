@@ -4,6 +4,6 @@ import { isAuthenticated } from '../middleware';
 
 export default (router: express.Router) => {
   // Quiz analysis routes (require authentication)
-  router.post('/api/quiz/analyze', isAuthenticated, analyzeQuizAnswers);
-  router.get('/api/quiz/spotify-analysis', isAuthenticated, getSpotifyAnalysis);
+  router.post('/quiz/analyze', isAuthenticated, analyzeQuizAnswers);
+  router.get('/quiz/spotify-analysis', isAuthenticated, getSpotifyAnalysis);
 }; 
