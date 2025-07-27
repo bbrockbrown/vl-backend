@@ -135,7 +135,7 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
 
 export const spotifyLogin = async (req: express.Request, res: express.Response) => {
   const state = stringGenerator(16);
-  const scope = 'user-read-private user-read-email';
+  const scope = 'user-read-private user-read-email user-read-recently-played user-top-read user-read-playback-state user-library-read playlist-read-private';
   const redirectUri = `${API_URL}/auth/spotify/callback`;
 
   req.session!.spotifyState = state;
@@ -206,5 +206,130 @@ export const refreshSpotifyToken = async (req: express.Request, res: express.Res
   } catch (error) {
     console.log('Token refresh error', error);
     res.status(400).json({ error: 'Failed to refresh token' });
+  }
+};
+
+export const getUserTopTracks = async (req: express.Request, res: express.Response) => {
+  try {
+    const user = req.identity;
+    if (!user || !user.spotify?.accessToken) {
+      return res.status(401).json({ error: 'User not authenticated or no Spotify token' });
+    }
+
+    const timeRange = req.query.time_range as string || 'short_term'; // short_term, medium_term, long_term
+    const limit = req.query.limit as string || '20';
+
+    const response = await fetch(
+      `https://api.spotify.com/v1/me/top/tracks?time_range=${timeRange}&limit=${limit}`,
+      {
+        headers: {
+          Authorization: `Bearer ${user.spotify.accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Spotify API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching top tracks:', error);
+    res.status(500).json({ error: 'Failed to fetch top tracks' });
+  }
+};
+
+export const getUserRecentlyPlayed = async (req: express.Request, res: express.Response) => {
+  try {
+    const user = req.identity;
+    if (!user || !user.spotify?.accessToken) {
+      return res.status(401).json({ error: 'User not authenticated or no Spotify token' });
+    }
+
+    const limit = req.query.limit as string || '50';
+
+    const response = await fetch(
+      `https://api.spotify.com/v1/me/player/recently-played?limit=${limit}`,
+      {
+        headers: {
+          Authorization: `Bearer ${user.spotify.accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Spotify API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching recently played:', error);
+    res.status(500).json({ error: 'Failed to fetch recently played tracks' });
+  }
+};
+
+export const getTrackAudioFeatures = async (req: express.Request, res: express.Response) => {
+  try {
+    const user = req.identity;
+    if (!user || !user.spotify?.accessToken) {
+      return res.status(401).json({ error: 'User not authenticated or no Spotify token' });
+    }
+
+    const trackIds = req.query.ids as string;
+    if (!trackIds) {
+      return res.status(400).json({ error: 'Track IDs are required' });
+    }
+
+    const response = await fetch(
+      `https://api.spotify.com/v1/audio-features?ids=${trackIds}`,
+      {
+        headers: {
+          Authorization: `Bearer ${user.spotify.accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Spotify API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching audio features:', error);
+    res.status(500).json({ error: 'Failed to fetch audio features' });
+  }
+};
+
+export const getUserSavedTracks = async (req: express.Request, res: express.Response) => {
+  try {
+    const user = req.identity;
+    if (!user || !user.spotify?.accessToken) {
+      return res.status(401).json({ error: 'User not authenticated or no Spotify token' });
+    }
+
+    const limit = req.query.limit as string || '20';
+    const offset = req.query.offset as string || '0';
+
+    const response = await fetch(
+      `https://api.spotify.com/v1/me/tracks?limit=${limit}&offset=${offset}`,
+      {
+        headers: {
+          Authorization: `Bearer ${user.spotify.accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Spotify API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching saved tracks:', error);
+    res.status(500).json({ error: 'Failed to fetch saved tracks' });
   }
 };
