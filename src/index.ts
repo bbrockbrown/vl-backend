@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import bodyParser from 'body-parser';
 import mongoose from 'mongoose';
-import compression from "compression";
+import compression from 'compression';
 import router from './router';
 import session from 'express-session';
 
@@ -15,21 +15,19 @@ const app = express();
 // Control what origins are allowed
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    const allowedOrigins = [
-      process.env.FRONTEND_URL,
-      process.env.FRONTEND_URL_DEV,
-    ];
-    console.log("Request origin", origin);
-    console.log("Allowed origins", allowedOrigins);
+    const allowedOrigins = [process.env.FRONTEND_URL, process.env.FRONTEND_URL_DEV];
+    console.log('Request origin', origin);
+    console.log('Allowed origins', allowedOrigins);
 
-    if (allowedOrigins.includes(origin) || !origin) { // !origin ==> curl http://localhost:5050...
+    if (allowedOrigins.includes(origin) || !origin || origin?.includes('localhost') || origin?.includes('127.0.0.1')) {
+      // !origin ==> curl http://localhost:5050...
       callback(null, true); // allow the request
     } else {
-      callback(new Error("Not allowed by CORS")); // deny
+      callback(new Error('Not allowed by CORS')); // deny
     }
   },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   maxAge: 86400,
 };
@@ -62,47 +60,47 @@ app.use((req, res, next) => {
 });
 
 // Session middleware
-app.use(session({
-  secret: process.env.SESSION_SECRET!,
-  resave: false,
-  saveUninitialized: false,
-  cookie: { 
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET!,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      maxAge: 5 * 24 * 60 * 60 * 1000, // 5 days
+    },
+  })
+);
 
 // Runs whenever there is an error
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error("ERROR DETAILS", {
+  console.error('ERROR DETAILS', {
     message: err.message,
     stack: err.stack,
     status: err.status || 500,
   });
 
   res.status(err.status || 500).json({
-    error:
-      process.env.NODE_ENV === "production"
-      ? "Internal Server Error"
-      : err.message,
+    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
   });
 });
 
 // URL and slash management
 // EX: URL//users///8494583854 ==> URL/users/8494583854
 app.use((req, res, next) => {
-  req.url = req.url.replace(/\/+/g, "/");
+  req.url = req.url.replace(/\/+/g, '/');
   next();
 });
 
 // Check to see if working
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "OK #working"});
-})
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK #working' });
+});
 
-if (process.env.NODE_ENV !== "production") {
-  console.log("CORS CONFIGURATION:", {
+if (process.env.NODE_ENV !== 'production') {
+  console.log('CORS CONFIGURATION:', {
     origin: process.env.FRONTEND_URL,
     allowedOrigins: [process.env.FRONTEND_URL, process.env.FRONTEND_URL_DEV],
     credentials: true,
@@ -113,7 +111,7 @@ if (process.env.NODE_ENV !== "production") {
 const PORT = process.env.PORT || 5050;
 app.listen(PORT, () => {
   console.log(`SERVER LISTENING ON PORT ${PORT}`);
-  console.log(`SERVER ENVIRONMENT: ${process.env.NODE_ENV || "development"}`);
+  console.log(`SERVER ENVIRONMENT: ${process.env.NODE_ENV || 'development'}`);
   console.log(`FRONTEND URL: ${process.env.FRONTEND_URL}`);
 });
 
@@ -126,7 +124,7 @@ if (!process.env.MONGO_URL) {
   process.exit(1);
 }
 
-// TODO ==> figure out ssl issue with railway + mongoDB. 
+// TODO ==> figure out ssl issue with railway + mongoDB.
 mongoose.connect(process.env.MONGO_URL, {
   retryWrites: true,
   w: 'majority',

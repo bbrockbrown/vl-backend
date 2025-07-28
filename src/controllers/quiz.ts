@@ -98,10 +98,9 @@ export const analyzeQuizAnswers = async (req: express.Request, res: express.Resp
       recommendations
     };
 
-    res.json(result);
+    return res.status(200).json(result);
   } catch (error) {
-    console.error('Error analyzing quiz answers:', error);
-    res.status(500).json({ error: 'Failed to analyze quiz answers' });
+    return res.status(500).json({ error: 'Failed to analyze quiz answers' });
   }
 };
 

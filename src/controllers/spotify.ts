@@ -18,7 +18,7 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
 
   // Make sure same state as request
   if (state === null || state !== originalState) {
-    res.redirect(
+    return res.redirect(
       '/#' +
         querystring.stringify({
           error: 'state_mismatch',
@@ -73,6 +73,7 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
     // We have email, so create user
     let user = await getUserByEmail(email);
     if (!user) {
+      console.log("this is a new user")
       // Confirmed user does NOT have an account
       const newUser = await createUser({
         email,
@@ -83,13 +84,14 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
           tokenExpiresAt: expiresAt,
         },
         authentication: {
-          password: 'temp',
+          password: 'spotify-auth', // placeholder since password is required
           salt: random(),
-          sessionToken: 'temp', // will be set below
+          sessionToken: '', // will be set below
         },
       });
       user = await getUserById(newUser._id.toString());
     } else {
+      console.log("User already has an account")
       // User has an account, update their tokens
       if (!user.spotify) user.spotify = {}; // keeps TS happy
       user.spotify.accessToken = access_token;
@@ -98,30 +100,53 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
     }
 
     if (user) {
+      // Ensure authentication object exists
       if (!user.authentication) {
         user.authentication = {
-          password: '',
+          password: 'spotify-auth', // placeholder since password is required
           salt: random(),
           sessionToken: '',
         };
       }
+      
+      // Generate new session token
       const salt = random();
       user.authentication.sessionToken = authentication(salt, user._id.toString());
       await user.save();
 
+      console.log("saved user info", user);
+
       // Set session token in session (for consistency)
       req.session.sessionToken = user.authentication.sessionToken;
+      console.log("req.session.sessionToken", user.authentication.sessionToken);
 
       // Set HTTP-only cookie (matches login pattern)
       const isProduction = process.env.NODE_ENV === 'production';
-      const cookieDomain = process.env.COOKIE_DOMAIN!;
-      res.cookie(process.env.COOKIE_NAME!, user.authentication.sessionToken, {
-        domain: isProduction ? cookieDomain : 'localhost',
+      const cookieDomain = process.env.COOKIE_DOMAIN;
+
+      console.log("isProd", isProduction);
+      console.log("cookie name", process.env.COOKIE_NAME);
+      console.log("cookie domain", cookieDomain);
+      
+      const cookieOptions: any = {
         path: '/',
-        httpOnly: true,
+        httpOnly: isProduction, // Only httpOnly in production
         secure: isProduction,
-        sameSite: 'strict',
-      });
+        sameSite: isProduction ? 'Lax' : 'lax',
+      };
+
+      // Only set domain in production
+      if (isProduction && cookieDomain) {
+        cookieOptions.domain = cookieDomain;
+      }
+      
+      if (!isProduction) {
+        delete cookieOptions.domain;
+      }
+
+      res.cookie(process.env.COOKIE_NAME!, user.authentication.sessionToken, cookieOptions);
+      console.log("Cookie set with options:", cookieOptions);
+      console.log("Cookie value:", user.authentication.sessionToken);
     }
     // Redirect to frontend
     res.redirect(`${process.env.FRONTEND_URL}/quiz?success=true`);
