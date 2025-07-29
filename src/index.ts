@@ -7,6 +7,8 @@ import mongoose from 'mongoose';
 import compression from 'compression';
 import router from './router';
 import session from 'express-session';
+import { SpotifyApi } from '@spotify/web-api-ts-sdk';
+import { injectSpotifyApi } from './middleware/spotify';
 
 dotenv.config();
 
@@ -19,7 +21,12 @@ const corsOptions = {
     console.log('Request origin', origin);
     console.log('Allowed origins', allowedOrigins);
 
-    if (allowedOrigins.includes(origin) || !origin || origin?.includes('localhost') || origin?.includes('127.0.0.1')) {
+    if (
+      allowedOrigins.includes(origin) ||
+      !origin ||
+      origin?.includes('localhost') ||
+      origin?.includes('127.0.0.1')
+    ) {
       // !origin ==> curl http://localhost:5050...
       callback(null, true); // allow the request
     } else {
@@ -141,3 +148,6 @@ mongoose.connection.once('open', () => {
 });
 
 app.use('/', router());
+
+// Use spotify API throughout application
+app.use(injectSpotifyApi);

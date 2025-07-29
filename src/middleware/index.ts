@@ -24,42 +24,39 @@ export const isOwner = async (req: express.Request, res: express.Response, next:
 
 export const isAuthenticated = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    console.log("In isAuthenticated")
-    console.log("Request body", req.body);
-    console.log("Request headers", req.headers);
-    console.log("All cookies:", req.cookies);
-    console.log("Cookie name:", process.env.COOKIE_NAME);
-    console.log("Authorization header:", req.headers.authorization);
+    // console.log("In isAuthenticated")
+    // console.log("Request body", req.body);
+    // console.log("Request hea", req.header);
+    // console.log("All cookies:", req.cookies);
+    // console.log("Cookie name:", process.env.COOKIE_NAME);
+    // console.log("Authorization header:", req.headers.authorization);
     
     // Try to get session token from cookies first
     let sessionToken = req.cookies[process.env.COOKIE_NAME!];
-    console.log("SessionToken from req.cookies");
     
     // If not in cookies, try Authorization header (for development)
     if (!sessionToken && req.headers.authorization) {
-      console.log("Session Token not found in req.cookies, setting from req.headers.authorization");
+      // console.log("Session Token not found in req.cookies, setting from req.headers.authorization");
       sessionToken = req.headers.authorization.replace('Bearer ', '');
     }
     
-    console.log("final sessionToken", sessionToken);
+    // console.log("sessionToken", sessionToken);
 
     if (!sessionToken) {
       return res.status(403).json({ error: "User is not authenticated" });
     }
 
     const existingUser = await getUserBySessionToken(sessionToken);
-    console.log("Existing user", existingUser);
 
     if (!existingUser) {
       return res.status(403).json({ error: "User is not authenticated or does not exist" });
     }
 
     merge(req, { identity: existingUser });
-    console.log("Completed merge");
 
     return next();
   } catch (error) {
-    console.log(error);
+    console.log("Error in authentication", error);
     return res.sendStatus(400);
   }
 }

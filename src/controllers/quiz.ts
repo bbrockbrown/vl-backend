@@ -1,6 +1,10 @@
 import express from 'express';
 import axios from 'axios';
 import { getUserTopTracks, getUserRecentlyPlayed, getTrackAudioFeatures } from './spotify';
+import { 
+  SpotifyHelper,
+  createSpotifyHelper
+} from '../helpers/spotifyHelpers';
 
 interface QuizAnswer {
   questionId: string;
@@ -58,9 +62,12 @@ export const analyzeQuizAnswers = async (req: express.Request, res: express.Resp
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    // Get Spotify data directly
+    const spotifyHelper = res.locals.spotifyHelper;
+
+    // Get Spotify data using SpotifyHelper
     const [topTracksData, recentlyPlayedData] = await Promise.all([
-      fetchSpotifyData(user, '/me/top/tracks', { time_range: 'short_term', limit: 20 }),
+      spotifyHelper!.getUserTopItems('tracks', 'short_term', 20, 0),
+      // Note: SpotifyHelper doesn't have a method for recently played, so we'll keep the direct API call for that
       fetchSpotifyData(user, '/me/player/recently-played', { limit: 50 })
     ]);
 
@@ -69,6 +76,8 @@ export const analyzeQuizAnswers = async (req: express.Request, res: express.Resp
       ...(topTracksData?.items?.map((track: any) => track.id) || []),
       ...(recentlyPlayedData?.items?.map((item: any) => item.track.id) || [])
     ].slice(0, 50); // Limit to 50 tracks for audio features
+
+    console.log("TrackIds", trackIds);
 
     // Get audio features for analysis
     const audioFeaturesData = trackIds.length > 0 
@@ -112,11 +121,13 @@ export const getSpotifyAnalysis = async (req: express.Request, res: express.Resp
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    // Get comprehensive Spotify data directly
+    const spotifyHelper = res.locals.spotifyHelper;
+
+    // Get comprehensive Spotify data using SpotifyHelper
     const [topTracksShort, topTracksMedium, topTracksLong, recentlyPlayed] = await Promise.all([
-      fetchSpotifyData(user, '/me/top/tracks', { time_range: 'short_term', limit: 20 }),
-      fetchSpotifyData(user, '/me/top/tracks', { time_range: 'medium_term', limit: 20 }),
-      fetchSpotifyData(user, '/me/top/tracks', { time_range: 'long_term', limit: 20 }),
+      spotifyHelper!.getUserTopItems('tracks', 'short_term', 20, 0),
+      spotifyHelper!.getUserTopItems('tracks', 'medium_term', 20, 0),
+      spotifyHelper!.getUserTopItems('tracks', 'long_term', 20, 0),
       fetchSpotifyData(user, '/me/player/recently-played', { limit: 50 })
     ]);
 

@@ -4,6 +4,7 @@ const UserSchema = new mongoose.Schema({
   username: { type: String, required: true },
   email: { type: String, required: true },
   premium: { type: Boolean, default: false },
+  pfpLink: { type: String, default: "https://i.postimg.cc/tC3FkHVs/image.png"},
   
   authentication: {
     password: { type: String, required: true, select: false },

@@ -13,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@spotify/web-api-ts-sdk": "^1.2.0",
     "@types/express-session": "^1.18.2",
     "@types/mongoose": "^5.11.96",
     "@types/stripe": "^8.0.416",

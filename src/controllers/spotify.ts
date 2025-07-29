@@ -4,6 +4,11 @@ import { URLSearchParams } from 'url';
 import { getApiUrl, random, stringGenerator, authentication } from '../helpers/index';
 import querystring from 'querystring';
 import { createUser, getUserByEmail, getUserById } from '../db/users';
+import {
+  Track,
+  Artist,
+  Album
+} from '../types/spotify/types';
 
 export const spotifyCallback = async (req: express.Request, res: express.Response) => {
   // Error checking for callback
@@ -68,7 +73,9 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
     });
 
     const profileData = await profileResponse.json();
-    const { email, id: spotifyId, display_name } = profileData;
+    const { email, id: spotifyId, display_name, images } = profileData;
+    // Pfp info
+    const { imgUrl } = images;
 
     // We have email, so create user
     let user = await getUserByEmail(email);
@@ -78,6 +85,8 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
       const newUser = await createUser({
         email,
         username: display_name || email,
+        premium: false,
+        pfpLink: imgUrl,
         spotify: {
           accessToken: access_token,
           refreshToken: refresh_token,
@@ -114,19 +123,19 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
       user.authentication.sessionToken = authentication(salt, user._id.toString());
       await user.save();
 
-      console.log("saved user info", user);
+      // console.log("saved user info", user);
 
       // Set session token in session (for consistency)
       req.session.sessionToken = user.authentication.sessionToken;
-      console.log("req.session.sessionToken", user.authentication.sessionToken);
+      // console.log("req.session.sessionToken", user.authentication.sessionToken);
 
       // Set HTTP-only cookie (matches login pattern)
       const isProduction = process.env.NODE_ENV === 'production';
       const cookieDomain = process.env.COOKIE_DOMAIN;
 
-      console.log("isProd", isProduction);
-      console.log("cookie name", process.env.COOKIE_NAME);
-      console.log("cookie domain", cookieDomain);
+      // console.log("isProd", isProduction);
+      // console.log("cookie name", process.env.COOKIE_NAME);
+      // console.log("cookie domain", cookieDomain);
       
       const cookieOptions: any = {
         path: '/',
@@ -145,8 +154,8 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
       }
 
       res.cookie(process.env.COOKIE_NAME!, user.authentication.sessionToken, cookieOptions);
-      console.log("Cookie set with options:", cookieOptions);
-      console.log("Cookie value:", user.authentication.sessionToken);
+      // console.log("Cookie set with options:", cookieOptions);
+      // console.log("Cookie value:", user.authentication.sessionToken);
     }
     // Redirect to frontend
     res.redirect(`${process.env.FRONTEND_URL}/quiz?success=true`);
@@ -160,7 +169,7 @@ export const spotifyLogin = async (req: express.Request, res: express.Response) 
   const state = stringGenerator(16);
   const scope = 'user-read-private user-read-email user-read-recently-played user-top-read user-read-playback-state user-library-read playlist-read-private';
   const redirectUri = `${getApiUrl()}/auth/spotify/callback`;
-  console.log("BASE API URL", getApiUrl())
+  // console.log("BASE API URL", getApiUrl())
 
   req.session!.spotifyState = state;
 
