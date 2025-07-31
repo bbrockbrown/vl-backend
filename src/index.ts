@@ -7,7 +7,6 @@ import mongoose from 'mongoose';
 import compression from 'compression';
 import router from './router';
 import session from 'express-session';
-import { SpotifyApi } from '@spotify/web-api-ts-sdk';
 import { injectSpotifyApi } from './middleware/spotify';
 
 dotenv.config();
@@ -148,6 +147,3 @@ mongoose.connection.once('open', () => {
 });
 
 app.use('/', router());
-
-// Use spotify API throughout application
-app.use(injectSpotifyApi);

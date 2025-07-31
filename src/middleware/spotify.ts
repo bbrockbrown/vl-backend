@@ -4,9 +4,19 @@ import { createSpotifyHelper } from '../helpers/spotifyHelpers';
 
 export const injectSpotifyApi = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    const accessToken = req.identity?.spotify.accessToken;
+    const user = req.identity;
+    const accessTokenString = user?.spotify?.accessToken;
 
-    if (accessToken) {
+    if (accessTokenString && user?.spotify?.tokenExpiresAt) {
+      // Create proper AccessToken for SDK 
+      const accessToken = {
+        access_token: accessTokenString,
+        token_type: 'Bearer',
+        expires_in: Math.floor((new Date(user.spotify.tokenExpiresAt).getTime() - Date.now()) / 1000),
+        refresh_token: user.spotify.refreshToken || '',
+        expires: new Date(user.spotify.tokenExpiresAt).getTime()
+      };
+
       const spotifyApi = SpotifyApi.withAccessToken(
         process.env.SPOTIFY_CLIENT_ID!,
         accessToken

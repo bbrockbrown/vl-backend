@@ -5,6 +5,8 @@ import {
   SpotifyHelper,
   createSpotifyHelper
 } from '../helpers/spotifyHelpers';
+import { getItemById, getValidChartmetricIds, getBulkAudioFeatures } from '../helpers/chartmetric';
+import { getAudioFeaturesByIds } from '../helpers/reccobeats';
 
 interface QuizAnswer {
   questionId: string;
@@ -54,9 +56,7 @@ async function fetchSpotifyData(user: any, endpoint: string, params: any = {}) {
 export const analyzeQuizAnswers = async (req: express.Request, res: express.Response) => {
   try {
     const { answers } = req.body as { answers: QuizAnswer[] };
-    console.log("Received answers from frontend", answers);
     const user = req.identity;
-    console.log("User", user);
 
     if (!user) {
       return res.status(401).json({ error: 'User not authenticated' });
@@ -72,17 +72,20 @@ export const analyzeQuizAnswers = async (req: express.Request, res: express.Resp
     ]);
 
     // Extract track IDs for audio features with proper error handling
-    const trackIds = [
+    const spotifyTrackIds = [
       ...(topTracksData?.items?.map((track: any) => track.id) || []),
       ...(recentlyPlayedData?.items?.map((item: any) => item.track.id) || [])
     ].slice(0, 50); // Limit to 50 tracks for audio features
+    
+    console.log(`Found ${spotifyTrackIds.length} Spotify track IDs`);
 
-    console.log("TrackIds", trackIds);
-
-    // Get audio features for analysis
-    const audioFeaturesData = trackIds.length > 0 
-      ? await fetchSpotifyData(user, '/audio-features', { ids: trackIds.join(',') })
-      : { audio_features: [] };
+    // Get audio features from ReccoBeats API
+    const trackAudioFeatures = await getAudioFeaturesByIds(spotifyTrackIds, spotifyTrackIds.length);
+    
+    // Use ReccoBeats as primary, Chartmetric as fallback (or vice versa)
+    const audioFeaturesData = {
+      reccobeats: trackAudioFeatures,
+    };
 
     // Analyze personality from quiz answers
     const personalityTraits = analyzePersonalityFromAnswers(answers);
