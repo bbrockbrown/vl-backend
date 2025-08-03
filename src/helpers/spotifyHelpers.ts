@@ -8,8 +8,10 @@ import {
   SimplifiedAlbum,
   Page,
   Market,
-  CountryCodeA2
+  CountryCodeA2,
+  PlayHistory,
 } from '../types/spotify/types';
+import { TrackAudioFeatures } from '../types/reccobeats/types';
 
 export class SpotifyHelper {
   constructor(private spotifyApi: SpotifyApi) {}
@@ -41,7 +43,7 @@ export class SpotifyHelper {
     }
   }
 
-  async getArtistTopTracksById(artistId: string, market: Market = "US"): Promise<Track[]> {
+  async getArtistTopTracksById(artistId: string, market: Market = 'US'): Promise<Track[]> {
     try {
       const response = await this.spotifyApi.artists.topTracks(artistId, market);
       return response.tracks;
@@ -66,12 +68,7 @@ export class SpotifyHelper {
     offset: number = 0
   ): Promise<SimplifiedTrack[]> {
     try {
-      const response = await this.spotifyApi.albums.tracks(
-        albumId,
-        market,
-        limit as any,
-        offset
-      );
+      const response = await this.spotifyApi.albums.tracks(albumId, market, limit as any, offset);
       return response.items;
     } catch (error) {
       throw this.handleSpotifyError(error);
@@ -88,12 +85,30 @@ export class SpotifyHelper {
   }
 
   // User-related functions
-  async getUserTopItems(
-    type: 'tracks' | 'artists',
+  async getUserTopTracks(
     time_range: 'short_term' | 'medium_term' | 'long_term', // short=4wks, med=6mos, long=1yr
     limit: number = 150, // lots of data asf
     offset: number = 0
-  ): Promise<Page<Track | Artist>> {
+  ): Promise<Page<Track>> {
+    try {
+      const response = await this.spotifyApi.currentUser.topItems(
+        'tracks',
+        time_range,
+        limit as any,
+        offset
+      );
+      return response;
+    } catch (error) {
+      throw this.handleSpotifyError(error);
+    }
+  }
+
+  async getUserTopArtists(
+    type: 'artists',
+    time_range: 'short_term' | 'medium_term' | 'long_term', // short=4wks, med=6mos, long=1yr
+    limit: number = 150, // lots of data asf
+    offset: number = 0
+  ): Promise<Page<Artist>> {
     try {
       const response = await this.spotifyApi.currentUser.topItems(
         type,
@@ -102,6 +117,45 @@ export class SpotifyHelper {
         offset
       );
       return response;
+    } catch (error) {
+      throw this.handleSpotifyError(error);
+    }
+  }
+
+  async getUserRecentlyPlayed(
+    limit: number = 50,
+    before?: string,
+    after?: string
+  ): Promise<PlayHistory[]> {
+    try {
+      const queryRange =
+        before !== undefined
+          ? { timestamp: parseInt(before), type: 'before' as const }
+          : after !== undefined
+          ? { timestamp: parseInt(after), type: 'after' as const }
+          : undefined;
+      const response = await this.spotifyApi.player.getRecentlyPlayedTracks(
+        limit as any,
+        queryRange
+      );
+      return response.items;
+    } catch (error) {
+      throw this.handleSpotifyError(error);
+    }
+  }
+
+  async getUserSavedTracks(
+    limit: number = 20,
+    offset: number = 0,
+    market: Market = 'US',
+  ): Promise<Track[]> {
+    try {
+      const response = await this.spotifyApi.currentUser.tracks.savedTracks(
+        limit as any,
+        offset,
+        market
+      );
+      return response.items.map((item) => item.track);
     } catch (error) {
       throw this.handleSpotifyError(error);
     }
@@ -124,17 +178,14 @@ export class SpotifyHelper {
     }
   }
 
-  async getUserFollowedArtists(
-    after: string,
-    limit: number = 20,
-  ): Promise<FollowedArtists> {
+  async getUserFollowedArtists(after: string, limit: number = 20): Promise<FollowedArtists> {
     try {
       const response = await this.spotifyApi.currentUser.followedArtists(after, limit as any);
       return response;
     } catch (error) {
       throw this.handleSpotifyError(error);
     }
-  } 
+  }
 
   // Recommendations
   // async getRecommendations(params: {
@@ -181,13 +232,59 @@ export class SpotifyHelper {
   // }
 
   // Audio analysis
-  // async getTrackAudioAnalysis(trackId: string): Promise<any> {
-  //   try {
-  //     return await this.spotifyApi.getTrackAudioAnalysis(trackId);
-  //   } catch (error) {
-  //     throw this.handleSpotifyError(error);
-  //   }
-  // }
+  async getAudioFeaturesById(spotifyTrackId: string): Promise<TrackAudioFeatures> {
+    try {
+      const response = await fetch(
+        `https://api.reccobeats.com/v1/track/${spotifyTrackId}/audio-features`,
+        {
+          headers: {
+            Accept: 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('ReccoBeats API Error:', errorText);
+        throw new Error(`ReccoBeats API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching from ReccoBeats API:', error);
+      throw error; // Re-throw the error to maintain the Promise rejection
+    }
+  }
+
+  async getAudioFeaturesByIds(
+    spotifyTrackIds: string[],
+    limit = 40
+  ): Promise<TrackAudioFeatures[]> {
+    try {
+      const idsParam =
+        limit <= 40
+          ? spotifyTrackIds.slice(0, limit).join(',')
+          : spotifyTrackIds.slice(0, 40).join(',');
+      const response = await fetch(`https://api.reccobeats.com/v1/audio-features?ids=${idsParam}`, {
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('ReccoBeats API Error:', errorText);
+        throw new Error(`ReccoBeats API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      return data.content;
+    } catch (error) {
+      console.error('Error fetching from ReccoBeats API:', error);
+      throw error; // Re-throw the error to maintain the Promise rejection
+    }
+  }
 
   // Market and genre functions
   async getAvailableMarkets(): Promise<string[]> {
@@ -224,13 +321,7 @@ export class SpotifyHelper {
     offset: number = 0
   ): Promise<Track[] | SimplifiedAlbum[] | Artist[]> {
     try {
-      const response = await this.spotifyApi.search(
-        query,
-        [type],
-        market,
-        limit as any,
-        offset
-      );
+      const response = await this.spotifyApi.search(query, [type], market, limit as any, offset);
 
       return type === 'track'
         ? response.tracks?.items || []

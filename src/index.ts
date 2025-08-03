@@ -8,6 +8,7 @@ import compression from 'compression';
 import router from './router';
 import session from 'express-session';
 import { injectSpotifyApi } from './middleware/spotify';
+import { spotifyPollingService } from './services/spotifyPollingService';
 
 dotenv.config();
 
@@ -144,6 +145,11 @@ mongoose.connect(process.env.MONGO_URL, {
 mongoose.connection.on('error', (error: Error) => console.log(error));
 mongoose.connection.once('open', () => {
   console.log('Connected to MongoDB successfully!');
+  
+  // Start the Spotify polling service after database connection
+  spotifyPollingService.startPolling().catch(error => {
+    console.error('Failed to start Spotify polling service:', error);
+  });
 });
 
 app.use('/', router());

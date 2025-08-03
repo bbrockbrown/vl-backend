@@ -1,12 +1,10 @@
 import { TrackAudioFeatures } from '../types/reccobeats/types';
 
 export async function getAudioFeaturesByIds(
-  spotifyTrackIds: number[],
+  spotifyTrackIds: string[],
   limit = 40
 ): Promise<TrackAudioFeatures[]> {
   try {
-    console.log(`Fetching audio features from ReccoBeats for ${spotifyTrackIds.length} tracks...`);
-
     const idsParam = limit <= 40 ? spotifyTrackIds.slice(0, limit).join(',') : spotifyTrackIds.slice(0, 40).join(',');
     const response = await fetch(`https://api.reccobeats.com/v1/audio-features?ids=${idsParam}`, {
       headers: {

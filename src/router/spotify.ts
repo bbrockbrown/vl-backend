@@ -17,8 +17,8 @@ export default (router: express.Router) => {
   router.post('/auth/spotify/refresh-token', isAuthenticated, refreshSpotifyToken);
   
   // Spotify API routes (require authentication)
-  router.get('/api/spotify/top-tracks', isAuthenticated, getUserTopTracks);
-  router.get('/api/spotify/recently-played', isAuthenticated, getUserRecentlyPlayed);
-  router.get('/api/spotify/audio-features', isAuthenticated, getTrackAudioFeatures);
-  router.get('/api/spotify/saved-tracks', isAuthenticated, getUserSavedTracks);
+  router.get('/spotify/top-tracks', isAuthenticated, getUserTopTracks);
+  router.get('/spotify/recently-played', isAuthenticated, getUserRecentlyPlayed);
+  router.get('/spotify/audio-features', isAuthenticated, getTrackAudioFeatures);
+  router.get('/spotify/saved-tracks', isAuthenticated, getUserSavedTracks);
 };

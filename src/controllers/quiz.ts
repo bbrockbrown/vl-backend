@@ -1,12 +1,7 @@
 import express from 'express';
 import axios from 'axios';
-import { getUserTopTracks, getUserRecentlyPlayed, getTrackAudioFeatures } from './spotify';
-import { 
-  SpotifyHelper,
-  createSpotifyHelper
-} from '../helpers/spotifyHelpers';
-import { getItemById, getValidChartmetricIds, getBulkAudioFeatures } from '../helpers/chartmetric';
 import { getAudioFeaturesByIds } from '../helpers/reccobeats';
+import { PlayHistory, Track } from '../types/spotify/types';
 
 interface QuizAnswer {
   questionId: string;
@@ -66,21 +61,19 @@ export const analyzeQuizAnswers = async (req: express.Request, res: express.Resp
 
     // Get Spotify data using SpotifyHelper
     const [topTracksData, recentlyPlayedData] = await Promise.all([
-      spotifyHelper!.getUserTopItems('tracks', 'short_term', 20, 0),
+      spotifyHelper!.getUserTopTracks('short_term', 20, 0),
       // Note: SpotifyHelper doesn't have a method for recently played, so we'll keep the direct API call for that
-      fetchSpotifyData(user, '/me/player/recently-played', { limit: 50 })
+      spotifyHelper!.getUserRecentlyPlayed(50)
     ]);
 
     // Extract track IDs for audio features with proper error handling
     const spotifyTrackIds = [
-      ...(topTracksData?.items?.map((track: any) => track.id) || []),
-      ...(recentlyPlayedData?.items?.map((item: any) => item.track.id) || [])
+      ...(topTracksData?.items?.map((track: Track) => track.id) || []),
+      ...(recentlyPlayedData?.map((item: PlayHistory) => item.track.id) || [])
     ].slice(0, 50); // Limit to 50 tracks for audio features
-    
-    console.log(`Found ${spotifyTrackIds.length} Spotify track IDs`);
 
     // Get audio features from ReccoBeats API
-    const trackAudioFeatures = await getAudioFeaturesByIds(spotifyTrackIds, spotifyTrackIds.length);
+    const trackAudioFeatures = await spotifyHelper!.getAudioFeaturesByIds(spotifyTrackIds, spotifyTrackIds.length);
     
     // Use ReccoBeats as primary, Chartmetric as fallback (or vice versa)
     const audioFeaturesData = {
@@ -128,9 +121,9 @@ export const getSpotifyAnalysis = async (req: express.Request, res: express.Resp
 
     // Get comprehensive Spotify data using SpotifyHelper
     const [topTracksShort, topTracksMedium, topTracksLong, recentlyPlayed] = await Promise.all([
-      spotifyHelper!.getUserTopItems('tracks', 'short_term', 20, 0),
-      spotifyHelper!.getUserTopItems('tracks', 'medium_term', 20, 0),
-      spotifyHelper!.getUserTopItems('tracks', 'long_term', 20, 0),
+      spotifyHelper!.getUserTopTracks('short_term', 20, 0),
+      spotifyHelper!.getUserTopTracks('medium_term', 20, 0),
+      spotifyHelper!.getUserTopTracks('long_term', 20, 0),
       fetchSpotifyData(user, '/me/player/recently-played', { limit: 50 })
     ]);
 

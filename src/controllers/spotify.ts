@@ -4,11 +4,6 @@ import { URLSearchParams } from 'url';
 import { getApiUrl, random, stringGenerator, authentication } from '../helpers/index';
 import querystring from 'querystring';
 import { createUser, getUserByEmail, getUserById } from '../db/users';
-import {
-  Track,
-  Artist,
-  Album
-} from '../types/spotify/types';
 
 export const spotifyCallback = async (req: express.Request, res: express.Response) => {
   // Error checking for callback
@@ -80,7 +75,7 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
     // We have email, so create user
     let user = await getUserByEmail(email);
     if (!user) {
-      console.log("this is a new user")
+      console.log('this is a new user');
       // Confirmed user does NOT have an account
       const newUser = await createUser({
         email,
@@ -100,7 +95,7 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
       });
       user = await getUserById(newUser._id.toString());
     } else {
-      console.log("User already has an account")
+      console.log('User already has an account');
       // User has an account, update their tokens
       if (!user.spotify) user.spotify = {}; // keeps TS happy
       user.spotify.accessToken = access_token;
@@ -117,7 +112,7 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
           sessionToken: '',
         };
       }
-      
+
       // Generate new session token
       const salt = random();
       user.authentication.sessionToken = authentication(salt, user._id.toString());
@@ -136,7 +131,7 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
       // console.log("isProd", isProduction);
       // console.log("cookie name", process.env.COOKIE_NAME);
       // console.log("cookie domain", cookieDomain);
-      
+
       const cookieOptions: any = {
         path: '/',
         httpOnly: isProduction, // Only httpOnly in production
@@ -148,7 +143,7 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
       if (isProduction && cookieDomain) {
         cookieOptions.domain = cookieDomain;
       }
-      
+
       if (!isProduction) {
         delete cookieOptions.domain;
       }
@@ -167,7 +162,8 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
 
 export const spotifyLogin = async (req: express.Request, res: express.Response) => {
   const state = stringGenerator(16);
-  const scope = 'user-read-private user-read-email user-read-recently-played user-top-read user-read-playback-state user-library-read playlist-read-private';
+  const scope =
+    'user-read-private user-read-email user-read-recently-played user-top-read user-read-playback-state user-library-read playlist-read-private';
   const redirectUri = `${getApiUrl()}/auth/spotify/callback`;
   // console.log("BASE API URL", getApiUrl())
 
@@ -243,126 +239,86 @@ export const refreshSpotifyToken = async (req: express.Request, res: express.Res
 };
 
 export const getUserTopTracks = async (req: express.Request, res: express.Response) => {
+  const { timeRange, limit, offset } = req.query;
+  const allowedRanges = ['short_term', 'medium_term', 'long_term'];
+  if (!timeRange || !allowedRanges.includes(timeRange as string)) {
+    return res.status(400).json({ error: 'Time range must be provided for top tracks' });
+  }
+
+  const spotifyHelper = res.locals.spotifyHelper;
+  if (!spotifyHelper) {
+    return res.status(400).json({ error: 'spotifyHelper not initialized' });
+  }
+
   try {
-    const user = req.identity;
-    if (!user || !user.spotify?.accessToken) {
-      return res.status(401).json({ error: 'User not authenticated or no Spotify token' });
-    }
-
-    const timeRange = req.query.time_range as string || 'short_term'; // short_term, medium_term, long_term
-    const limit = req.query.limit as string || '20';
-
-    const response = await fetch(
-      `https://api.spotify.com/v1/me/top/tracks?time_range=${timeRange}&limit=${limit}`,
-      {
-        headers: {
-          Authorization: `Bearer ${user.spotify.accessToken}`,
-        },
-      }
+    const response = await spotifyHelper.getUserTopTracks(
+      timeRange as 'short_term' | 'medium_term' | 'long_term',
+      limit ? parseInt(limit as string) : undefined,
+      offset ? parseInt(offset as string) : undefined
     );
-
-    if (!response.ok) {
-      throw new Error(`Spotify API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    res.json(data);
+    res.json(response);
   } catch (error) {
-    console.error('Error fetching top tracks:', error);
-    res.status(500).json({ error: 'Failed to fetch top tracks' });
+    return res.status(400).json({ error: "Failed to get User's top tracks" });
   }
 };
 
 export const getUserRecentlyPlayed = async (req: express.Request, res: express.Response) => {
+  const { limit, after, before } = req.query;
+  if (!limit) {
+    return res.status(400).json({ error: "Recently Played must have a limit" });
+  }
+
+  const spotifyHelper = res.locals.spotifyHelper;
+  if (!spotifyHelper) {
+    return res.status(400).json({ error: 'spotifyHelper not initialized' });
+  }
+
   try {
-    const user = req.identity;
-    if (!user || !user.spotify?.accessToken) {
-      return res.status(401).json({ error: 'User not authenticated or no Spotify token' });
-    }
-
-    const limit = req.query.limit as string || '50';
-
-    const response = await fetch(
-      `https://api.spotify.com/v1/me/player/recently-played?limit=${limit}`,
-      {
-        headers: {
-          Authorization: `Bearer ${user.spotify.accessToken}`,
-        },
-      }
+    const response = await spotifyHelper.getUserRecentlyPlayed(
+      parseInt(limit as string),
+      after ? after as string : undefined,
+      before ? before as string : undefined
     );
-
-    if (!response.ok) {
-      throw new Error(`Spotify API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    res.json(data);
+    res.json(response);
   } catch (error) {
-    console.error('Error fetching recently played:', error);
-    res.status(500).json({ error: 'Failed to fetch recently played tracks' });
+    return res.status(400).json({ error: "Failed to get User's recently played tracks" });
   }
 };
 
 export const getTrackAudioFeatures = async (req: express.Request, res: express.Response) => {
+  const { trackId } = req.query;
+  if (!trackId) {
+    return res.status(400).json({ error: 'Track ID must be provided' });
+  }
+
+  const spotifyHelper = res.locals.spotifyHelper;
+  if (!spotifyHelper) {
+    return res.status(400).json({ error: 'spotifyHelper not initialized' });
+  }
+
   try {
-    const user = req.identity;
-    if (!user || !user.spotify?.accessToken) {
-      return res.status(401).json({ error: 'User not authenticated or no Spotify token' });
-    }
-
-    const trackIds = req.query.ids as string;
-    if (!trackIds) {
-      return res.status(400).json({ error: 'Track IDs are required' });
-    }
-
-    const response = await fetch(
-      `https://api.spotify.com/v1/audio-features?ids=${trackIds}`,
-      {
-        headers: {
-          Authorization: `Bearer ${user.spotify.accessToken}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Spotify API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    res.json(data);
+    const response = await spotifyHelper.getAudioFeaturesById(trackId as string);
+    res.json(response);
   } catch (error) {
-    console.error('Error fetching audio features:', error);
-    res.status(500).json({ error: 'Failed to fetch audio features' });
+    return res.status(400).json({ error: 'Failed to get track audio features' });
   }
 };
 
 export const getUserSavedTracks = async (req: express.Request, res: express.Response) => {
+  const { limit, offset } = req.query;
+
+  const spotifyHelper = res.locals.spotifyHelper;
+  if (!spotifyHelper) {
+    return res.status(400).json({ error: 'spotifyHelper not initialized' });
+  }
+
   try {
-    const user = req.identity;
-    if (!user || !user.spotify?.accessToken) {
-      return res.status(401).json({ error: 'User not authenticated or no Spotify token' });
-    }
-
-    const limit = req.query.limit as string || '20';
-    const offset = req.query.offset as string || '0';
-
-    const response = await fetch(
-      `https://api.spotify.com/v1/me/tracks?limit=${limit}&offset=${offset}`,
-      {
-        headers: {
-          Authorization: `Bearer ${user.spotify.accessToken}`,
-        },
-      }
+    const response = await spotifyHelper.getUserSavedTracks(
+      limit ? parseInt(limit as string) : undefined,
+      offset ? parseInt(offset as string) : undefined
     );
-
-    if (!response.ok) {
-      throw new Error(`Spotify API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    res.json(data);
+    res.json(response);
   } catch (error) {
-    console.error('Error fetching saved tracks:', error);
-    res.status(500).json({ error: 'Failed to fetch saved tracks' });
+    return res.status(400).json({ error: "Failed to get User's saved tracks" });
   }
 };

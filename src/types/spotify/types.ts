@@ -170,6 +170,12 @@ export interface LinkedFrom {
     uri: string
 }
 
+export interface PlayHistory{
+  track: Track;
+  played_at: string;
+  context: Context;
+}
+
 export interface SimplifiedTrack {
     artists: SimplifiedArtist[]
     available_markets: string[]
