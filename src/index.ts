@@ -147,9 +147,9 @@ mongoose.connection.once('open', () => {
   console.log('Connected to MongoDB successfully!');
   
   // Start the Spotify polling service after database connection
-  spotifyPollingService.startPolling().catch(error => {
-    console.error('Failed to start Spotify polling service:', error);
-  });
+  // spotifyPollingService.startPolling().catch(error => {
+  //   console.error('Failed to start Spotify polling service:', error);
+  // });
 });
 
 app.use('/', router());

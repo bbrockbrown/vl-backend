@@ -6,9 +6,11 @@ import {
   getUserTopTracks,
   getUserRecentlyPlayed,
   getTrackAudioFeatures,
-  getUserSavedTracks
+  getUserSavedTracks,
+  getTracksAudioFeatures
 } from '../controllers/spotify';
 import { isAuthenticated } from '../middleware';
+import { injectSpotifyApi } from '../middleware/spotify';
 
 export default (router: express.Router) => {
   // Spotify OAuth routes (no auth required - this IS the auth)
@@ -17,8 +19,9 @@ export default (router: express.Router) => {
   router.post('/auth/spotify/refresh-token', isAuthenticated, refreshSpotifyToken);
   
   // Spotify API routes (require authentication)
-  router.get('/spotify/top-tracks', isAuthenticated, getUserTopTracks);
-  router.get('/spotify/recently-played', isAuthenticated, getUserRecentlyPlayed);
-  router.get('/spotify/audio-features', isAuthenticated, getTrackAudioFeatures);
-  router.get('/spotify/saved-tracks', isAuthenticated, getUserSavedTracks);
+  router.get('/spotify/top-tracks', isAuthenticated, injectSpotifyApi, getUserTopTracks);
+  router.get('/spotify/recently-played', isAuthenticated, injectSpotifyApi, getUserRecentlyPlayed);
+  router.get('/spotify/audio-features', isAuthenticated, injectSpotifyApi, getTrackAudioFeatures);
+  router.get('/spotify/multiple-audio-features', isAuthenticated, injectSpotifyApi, getTracksAudioFeatures);
+  router.get('/spotify/saved-tracks', isAuthenticated, injectSpotifyApi, getUserSavedTracks);
 };

@@ -74,20 +74,19 @@ export const analyzeQuizAnswers = async (req: express.Request, res: express.Resp
 
     // Get audio features from ReccoBeats API
     const trackAudioFeatures = await spotifyHelper!.getAudioFeaturesByIds(spotifyTrackIds, spotifyTrackIds.length);
-    
-    // Use ReccoBeats as primary, Chartmetric as fallback (or vice versa)
-    const audioFeaturesData = {
-      reccobeats: trackAudioFeatures,
-    };
+    console.log("trackAudioFeatures", trackAudioFeatures)
 
     // Analyze personality from quiz answers
     const personalityTraits = analyzePersonalityFromAnswers(answers);
+    console.log("personality Traits", personalityTraits);
 
     // Analyze music patterns
-    const musicPatterns = analyzeMusicPatterns(audioFeaturesData);
+    const musicPatterns = analyzeMusicPatterns(trackAudioFeatures);
+    console.log("musicPatterns", musicPatterns);
 
     // Correlate personality with music
     const musicCorrelations = correlatePersonalityWithMusic(personalityTraits, musicPatterns);
+    console.log("musicCorrelations", musicCorrelations);
 
     // Generate insights and recommendations
     const { insights, recommendations } = generateInsightsAndRecommendations(
@@ -134,14 +133,13 @@ export const getSpotifyAnalysis = async (req: express.Request, res: express.Resp
       ...(topTracksLong?.items?.map((track: any) => track.id) || []),
       ...(recentlyPlayed?.items?.map((item: any) => item.track.id) || [])
     ];
-
     const uniqueTrackIds = [...new Set(allTrackIds)].slice(0, 100);
-    const audioFeatures = uniqueTrackIds.length > 0
-      ? await fetchSpotifyData(user, '/audio-features', { ids: uniqueTrackIds.join(',') })
-      : { audio_features: [] };
 
-    // Calculate listening patterns
-    const listeningPatterns = calculateListeningPatterns(audioFeatures);
+    // Get audio features from ReccoBeats API
+    const trackAudioFeatures = await spotifyHelper!.getAudioFeaturesByIds(uniqueTrackIds, uniqueTrackIds.length);
+
+    // Analyze music patterns
+    const musicPatterns = analyzeMusicPatterns(trackAudioFeatures);
 
     res.json({
       topTracks: {
@@ -150,8 +148,8 @@ export const getSpotifyAnalysis = async (req: express.Request, res: express.Resp
         longTerm: topTracksLong
       },
       recentlyPlayed,
-      audioFeatures,
-      listeningPatterns
+      trackAudioFeatures,
+      musicPatterns
     });
   } catch (error) {
     console.error('Error getting Spotify analysis:', error);
@@ -265,7 +263,23 @@ function analyzeLifestylePattern(lifestyleAnswers: QuizAnswer[]): string {
 }
 
 function analyzeMusicPatterns(audioFeatures: any): any {
-  if (!audioFeatures.audio_features || audioFeatures.audio_features.length === 0) {
+  // Handle the case where audioFeatures is a direct array
+  let features = audioFeatures;
+  
+  // If it's wrapped in an object with audio_features property
+  if (audioFeatures && audioFeatures.audio_features) {
+    features = audioFeatures.audio_features;
+  }
+  
+  // Filter out null/undefined features and ensure we have valid data
+  const validFeatures = features.filter((f: any) => 
+    f && 
+    typeof f.valence === 'number' && 
+    typeof f.energy === 'number' && 
+    typeof f.danceability === 'number'
+  );
+
+  if (!validFeatures || validFeatures.length === 0) {
     return {
       averageValence: 0.5,
       averageEnergy: 0.5,
@@ -276,25 +290,24 @@ function analyzeMusicPatterns(audioFeatures: any): any {
     };
   }
 
-  const features = audioFeatures.audio_features;
-  const total = features.length;
+  const total = validFeatures.length;
 
   return {
-    averageValence: features.reduce((sum: number, f: any) => sum + (f.valence || 0), 0) / total,
-    averageEnergy: features.reduce((sum: number, f: any) => sum + (f.energy || 0), 0) / total,
-    averageDanceability: features.reduce((sum: number, f: any) => sum + (f.danceability || 0), 0) / total,
-    averageTempo: features.reduce((sum: number, f: any) => sum + (f.tempo || 120), 0) / total,
-    averageAcousticness: features.reduce((sum: number, f: any) => sum + (f.acousticness || 0), 0) / total,
-    averageInstrumentalness: features.reduce((sum: number, f: any) => sum + (f.instrumentalness || 0), 0) / total
+    averageValence: validFeatures.reduce((sum: number, f: any) => sum + (f.valence || 0), 0) / total,
+    averageEnergy: validFeatures.reduce((sum: number, f: any) => sum + (f.energy || 0), 0) / total,
+    averageDanceability: validFeatures.reduce((sum: number, f: any) => sum + (f.danceability || 0), 0) / total,
+    averageTempo: validFeatures.reduce((sum: number, f: any) => sum + (f.tempo || 120), 0) / total,
+    averageAcousticness: validFeatures.reduce((sum: number, f: any) => sum + (f.acousticness || 0), 0) / total,
+    averageInstrumentalness: validFeatures.reduce((sum: number, f: any) => sum + (f.instrumentalness || 0), 0) / total
   };
 }
 
 function correlatePersonalityWithMusic(personality: PersonalityProfile, musicPatterns: any): MusicCorrelation {
-  // Simple correlation logic - can be enhanced with more sophisticated algorithms
-  const moodMusicMatch = calculateMoodMusicMatch(personality.moodProfile, musicPatterns.averageValence);
-  const energyMusicMatch = calculateEnergyMusicMatch(personality.energyLevel, musicPatterns.averageEnergy);
-  const socialMusicMatch = calculateSocialMusicMatch(personality.socialStyle, musicPatterns.averageDanceability);
-  const creativityMusicMatch = calculateCreativityMusicMatch(personality.creativityLevel, musicPatterns.averageInstrumentalness);
+  // Enhanced correlation logic with weighted scoring and feature interactions
+  const moodMusicMatch = calculateMoodMusicMatch(personality.moodProfile, musicPatterns);
+  const energyMusicMatch = calculateEnergyMusicMatch(personality.energyLevel, musicPatterns);
+  const socialMusicMatch = calculateSocialMusicMatch(personality.socialStyle, musicPatterns);
+  const creativityMusicMatch = calculateCreativityMusicMatch(personality.creativityLevel, musicPatterns);
 
   return {
     moodMusicMatch,
@@ -304,53 +317,166 @@ function correlatePersonalityWithMusic(personality: PersonalityProfile, musicPat
   };
 }
 
-function calculateMoodMusicMatch(moodProfile: string, averageValence: number): number {
-  const moodValenceMap: { [key: string]: number } = {
-    'Optimistic and Positive': 0.8,
-    'Calm and Balanced': 0.6,
-    'Energetic and Enthusiastic': 0.7,
-    'Thoughtful and Reflective': 0.4,
-    'Adaptable and Variable': 0.5
+function calculateMoodMusicMatch(moodProfile: string, musicPatterns: any): number {
+  const { averageValence, averageEnergy, averageAcousticness } = musicPatterns;
+  
+  // Multi-dimensional mood mapping with feature interactions
+  const moodProfiles: { [key: string]: any } = {
+    'Optimistic and Positive': {
+      valence: { expected: 0.75, weight: 0.4 },
+      energy: { expected: 0.65, weight: 0.3 },
+      acousticness: { expected: 0.3, weight: 0.3 }
+    },
+    'Calm and Balanced': {
+      valence: { expected: 0.6, weight: 0.3 },
+      energy: { expected: 0.4, weight: 0.4 },
+      acousticness: { expected: 0.5, weight: 0.3 }
+    },
+    'Energetic and Enthusiastic': {
+      valence: { expected: 0.7, weight: 0.3 },
+      energy: { expected: 0.8, weight: 0.5 },
+      acousticness: { expected: 0.2, weight: 0.2 }
+    },
+    'Thoughtful and Reflective': {
+      valence: { expected: 0.4, weight: 0.3 },
+      energy: { expected: 0.3, weight: 0.3 },
+      acousticness: { expected: 0.6, weight: 0.4 }
+    },
+    'Adaptable and Variable': {
+      valence: { expected: 0.55, weight: 0.4 },
+      energy: { expected: 0.5, weight: 0.3 },
+      acousticness: { expected: 0.4, weight: 0.3 }
+    }
   };
 
-  const expectedValence = moodValenceMap[moodProfile] || 0.5;
-  return Math.max(0, 1 - Math.abs(averageValence - expectedValence));
+  const profile = moodProfiles[moodProfile] || moodProfiles['Adaptable and Variable'];
+  
+  // Calculate weighted score with non-linear scaling
+  const valenceScore = calculateFeatureScore(averageValence, profile.valence.expected, profile.valence.weight);
+  const energyScore = calculateFeatureScore(averageEnergy, profile.energy.expected, profile.energy.weight);
+  const acousticnessScore = calculateFeatureScore(averageAcousticness, profile.acousticness.expected, profile.acousticness.weight);
+  
+  return (valenceScore + energyScore + acousticnessScore) / 3;
 }
 
-function calculateEnergyMusicMatch(energyLevel: string, averageEnergy: number): number {
-  const energyMap: { [key: string]: number } = {
-    'High Energy and Active': 0.8,
-    'High Energy': 0.7,
-    'Low Energy and Relaxed': 0.3,
-    'Moderate Energy': 0.5
+function calculateEnergyMusicMatch(energyLevel: string, musicPatterns: any): number {
+  const { averageEnergy, averageTempo, averageDanceability } = musicPatterns;
+  
+  const energyProfiles: { [key: string]: any } = {
+    'High Energy and Active': {
+      energy: { expected: 0.8, weight: 0.4 },
+      tempo: { expected: 140, weight: 0.3 },
+      danceability: { expected: 0.7, weight: 0.3 }
+    },
+    'High Energy': {
+      energy: { expected: 0.7, weight: 0.5 },
+      tempo: { expected: 130, weight: 0.3 },
+      danceability: { expected: 0.6, weight: 0.2 }
+    },
+    'Low Energy and Relaxed': {
+      energy: { expected: 0.3, weight: 0.5 },
+      tempo: { expected: 90, weight: 0.3 },
+      danceability: { expected: 0.3, weight: 0.2 }
+    },
+    'Moderate Energy': {
+      energy: { expected: 0.5, weight: 0.4 },
+      tempo: { expected: 120, weight: 0.3 },
+      danceability: { expected: 0.5, weight: 0.3 }
+    }
   };
 
-  const expectedEnergy = energyMap[energyLevel] || 0.5;
-  return Math.max(0, 1 - Math.abs(averageEnergy - expectedEnergy));
+  const profile = energyProfiles[energyLevel] || energyProfiles['Moderate Energy'];
+  
+  // Normalize tempo to 0-1 scale (assuming 60-200 BPM range)
+  const normalizedTempo = Math.min(Math.max((averageTempo - 60) / 140, 0), 1);
+  
+  const energyScore = calculateFeatureScore(averageEnergy, profile.energy.expected, profile.energy.weight);
+  const tempoScore = calculateFeatureScore(normalizedTempo, (profile.tempo.expected - 60) / 140, profile.tempo.weight);
+  const danceabilityScore = calculateFeatureScore(averageDanceability, profile.danceability.expected, profile.danceability.weight);
+  
+  return (energyScore + tempoScore + danceabilityScore) / 3;
 }
 
-function calculateSocialMusicMatch(socialStyle: string, averageDanceability: number): number {
-  const socialDanceMap: { [key: string]: number } = {
-    'Extroverted and Social': 0.8,
-    'Introverted and Private': 0.3,
-    'Active and Outdoorsy': 0.6,
-    'Balanced and Adaptable': 0.5
+function calculateSocialMusicMatch(socialStyle: string, musicPatterns: any): number {
+  const { averageDanceability, averageEnergy, averageLiveness } = musicPatterns;
+  
+  const socialProfiles: { [key: string]: any } = {
+    'Extroverted and Social': {
+      danceability: { expected: 0.8, weight: 0.4 },
+      energy: { expected: 0.7, weight: 0.3 },
+      liveness: { expected: 0.5, weight: 0.3 }
+    },
+    'Introverted and Private': {
+      danceability: { expected: 0.3, weight: 0.4 },
+      energy: { expected: 0.4, weight: 0.3 },
+      liveness: { expected: 0.2, weight: 0.3 }
+    },
+    'Active and Outdoorsy': {
+      danceability: { expected: 0.6, weight: 0.3 },
+      energy: { expected: 0.7, weight: 0.4 },
+      liveness: { expected: 0.4, weight: 0.3 }
+    },
+    'Balanced and Adaptable': {
+      danceability: { expected: 0.5, weight: 0.4 },
+      energy: { expected: 0.5, weight: 0.3 },
+      liveness: { expected: 0.3, weight: 0.3 }
+    }
   };
 
-  const expectedDanceability = socialDanceMap[socialStyle] || 0.5;
-  return Math.max(0, 1 - Math.abs(averageDanceability - expectedDanceability));
+  const profile = socialProfiles[socialStyle] || socialProfiles['Balanced and Adaptable'];
+  
+  const danceabilityScore = calculateFeatureScore(averageDanceability, profile.danceability.expected, profile.danceability.weight);
+  const energyScore = calculateFeatureScore(averageEnergy, profile.energy.expected, profile.energy.weight);
+  const livenessScore = calculateFeatureScore(averageLiveness || 0.3, profile.liveness.expected, profile.liveness.weight);
+  
+  return (danceabilityScore + energyScore + livenessScore) / 3;
 }
 
-function calculateCreativityMusicMatch(creativityLevel: string, averageInstrumentalness: number): number {
-  const creativityInstrumentalMap: { [key: string]: number } = {
-    'Highly Creative and Exploratory': 0.6,
-    'Comfort-Seeking and Traditional': 0.2,
-    'Open to New Experiences': 0.5,
-    'Moderately Creative': 0.4
+function calculateCreativityMusicMatch(creativityLevel: string, musicPatterns: any): number {
+  const { averageInstrumentalness, averageAcousticness, averageSpeechiness } = musicPatterns;
+  
+  const creativityProfiles: { [key: string]: any } = {
+    'Highly Creative and Exploratory': {
+      instrumentalness: { expected: 0.6, weight: 0.4 },
+      acousticness: { expected: 0.4, weight: 0.3 },
+      speechiness: { expected: 0.1, weight: 0.3 }
+    },
+    'Comfort-Seeking and Traditional': {
+      instrumentalness: { expected: 0.2, weight: 0.3 },
+      acousticness: { expected: 0.6, weight: 0.4 },
+      speechiness: { expected: 0.05, weight: 0.3 }
+    },
+    'Open to New Experiences': {
+      instrumentalness: { expected: 0.5, weight: 0.4 },
+      acousticness: { expected: 0.5, weight: 0.3 },
+      speechiness: { expected: 0.08, weight: 0.3 }
+    },
+    'Moderately Creative': {
+      instrumentalness: { expected: 0.4, weight: 0.4 },
+      acousticness: { expected: 0.4, weight: 0.3 },
+      speechiness: { expected: 0.06, weight: 0.3 }
+    }
   };
 
-  const expectedInstrumentalness = creativityInstrumentalMap[creativityLevel] || 0.4;
-  return Math.max(0, 1 - Math.abs(averageInstrumentalness - expectedInstrumentalness));
+  const profile = creativityProfiles[creativityLevel] || creativityProfiles['Moderately Creative'];
+  
+  const instrumentalnessScore = calculateFeatureScore(averageInstrumentalness, profile.instrumentalness.expected, profile.instrumentalness.weight);
+  const acousticnessScore = calculateFeatureScore(averageAcousticness, profile.acousticness.expected, profile.acousticness.weight);
+  const speechinessScore = calculateFeatureScore(averageSpeechiness || 0.05, profile.speechiness.expected, profile.speechiness.weight);
+  
+  return (instrumentalnessScore + acousticnessScore + speechinessScore) / 3;
+}
+
+// Enhanced feature scoring with non-linear scaling and better tolerance
+function calculateFeatureScore(actual: number, expected: number, weight: number): number {
+  const difference = Math.abs(actual - expected);
+  
+  // Use exponential decay for better tolerance of small differences
+  // This gives higher scores for closer matches and more graceful degradation
+  const score = Math.exp(-difference * 2) * weight;
+  
+  // Ensure score is between 0 and 1
+  return Math.max(0, Math.min(1, score));
 }
 
 function generateInsightsAndRecommendations(
@@ -361,56 +487,115 @@ function generateInsightsAndRecommendations(
   const insights: string[] = [];
   const recommendations: string[] = [];
 
-  // Generate insights based on correlations
+  // Enhanced insights based on multi-dimensional correlations
   if (correlations.moodMusicMatch > 0.8) {
     insights.push("Your music choices perfectly reflect your mood profile!");
+  } else if (correlations.moodMusicMatch > 0.6) {
+    insights.push("Your music choices align well with your mood preferences.");
   } else if (correlations.moodMusicMatch < 0.4) {
     insights.push("Your music choices might be compensating for your mood - interesting!");
   }
 
   if (correlations.energyMusicMatch > 0.8) {
     insights.push("Your energy level and music energy are perfectly aligned.");
+  } else if (correlations.energyMusicMatch > 0.6) {
+    insights.push("Your music energy matches your lifestyle well.");
   } else if (correlations.energyMusicMatch < 0.4) {
     insights.push("You might be using music to balance your energy levels.");
   }
 
-  // Generate recommendations
-  if (musicPatterns.averageValence < 0.4 && personality.moodProfile.includes('Positive')) {
+  if (correlations.socialMusicMatch > 0.8) {
+    insights.push("Your social style and music preferences are in perfect harmony!");
+  } else if (correlations.socialMusicMatch > 0.6) {
+    insights.push("Your music choices complement your social preferences.");
+  } else if (correlations.socialMusicMatch < 0.4) {
+    insights.push("Your music might be helping you explore different social dynamics.");
+  }
+
+  if (correlations.creativityMusicMatch > 0.8) {
+    insights.push("Your creative spirit shines through in your music choices!");
+  } else if (correlations.creativityMusicMatch > 0.6) {
+    insights.push("Your music reflects your creative personality well.");
+  } else if (correlations.creativityMusicMatch < 0.4) {
+    insights.push("You might enjoy exploring more experimental music genres.");
+  }
+
+  // Enhanced recommendations based on feature analysis
+  const { averageValence, averageEnergy, averageDanceability, averageAcousticness, averageInstrumentalness, averageTempo } = musicPatterns;
+
+  // Mood-based recommendations
+  if (averageValence < 0.4 && personality.moodProfile.includes('Positive')) {
     recommendations.push("Try adding more upbeat tracks to boost your mood!");
+  } else if (averageValence > 0.7 && personality.moodProfile.includes('Reflective')) {
+    recommendations.push("Consider adding more contemplative tracks for deeper reflection.");
   }
 
-  if (musicPatterns.averageEnergy < 0.3 && personality.energyLevel.includes('High')) {
+  // Energy-based recommendations
+  if (averageEnergy < 0.3 && personality.energyLevel.includes('High')) {
     recommendations.push("Consider adding higher energy tracks to match your active lifestyle.");
+  } else if (averageEnergy > 0.7 && personality.energyLevel.includes('Relaxed')) {
+    recommendations.push("Try adding more calming tracks for relaxation and focus.");
   }
 
-  if (musicPatterns.averageDanceability < 0.4 && personality.socialStyle.includes('Social')) {
+  // Social-based recommendations
+  if (averageDanceability < 0.4 && personality.socialStyle.includes('Social')) {
     recommendations.push("Add some danceable tracks for your social gatherings!");
+  } else if (averageDanceability > 0.7 && personality.socialStyle.includes('Private')) {
+    recommendations.push("Consider adding more intimate, low-key tracks for personal time.");
+  }
+
+  // Creativity-based recommendations
+  if (averageAcousticness < 0.3 && personality.creativityLevel.includes('Traditional')) {
+    recommendations.push("You might enjoy more acoustic and organic sounds.");
+  } else if (averageAcousticness > 0.7 && personality.creativityLevel.includes('Exploratory')) {
+    recommendations.push("Try exploring electronic and experimental genres for new experiences.");
+  }
+
+  if (averageInstrumentalness < 0.2 && personality.creativityLevel.includes('Exploratory')) {
+    recommendations.push("Try exploring instrumental music for creative inspiration.");
+  } else if (averageInstrumentalness > 0.6 && personality.creativityLevel.includes('Traditional')) {
+    recommendations.push("Consider adding more vocal-driven tracks for emotional connection.");
+  }
+
+  // Lifestyle-based recommendations
+  if (personality.lifestylePattern.includes('Productivity') && averageEnergy > 0.6) {
+    recommendations.push("Try adding more ambient and focus-oriented tracks for work sessions.");
+  } else if (personality.lifestylePattern.includes('Fun-Seeking') && averageEnergy < 0.5) {
+    recommendations.push("Add some high-energy party tracks for your fun activities!");
+  }
+
+  if (personality.lifestylePattern.includes('Relaxation') && averageAcousticness < 0.4) {
+    recommendations.push("Consider adding more soothing acoustic tracks for relaxation.");
+  } else if (personality.lifestylePattern.includes('Discovery') && averageInstrumentalness < 0.3) {
+    recommendations.push("Explore world music and diverse cultural sounds for discovery.");
+  }
+
+  // Tempo-based recommendations
+  if (averageTempo > 140 && personality.energyLevel.includes('Relaxed')) {
+    recommendations.push("Try adding slower tempo tracks for a more relaxed listening experience.");
+  } else if (averageTempo < 100 && personality.energyLevel.includes('Active')) {
+    recommendations.push("Add some faster-paced tracks to match your active lifestyle.");
+  }
+
+  // Ensure at least 2 recommendations
+  if (recommendations.length < 2) {
+    // Add general recommendations based on overall patterns
+    if (averageValence < 0.5) {
+      recommendations.push("Consider adding more positive and uplifting tracks to your playlist.");
+    }
+    if (averageEnergy < 0.4) {
+      recommendations.push("Try incorporating more energetic tracks for variety.");
+    }
+    if (averageDanceability < 0.5) {
+      recommendations.push("Add some groovy tracks to get you moving!");
+    }
+    if (averageAcousticness < 0.4) {
+      recommendations.push("Explore acoustic and unplugged versions of your favorite songs.");
+    }
+    if (averageInstrumentalness < 0.3) {
+      recommendations.push("Try adding instrumental tracks for background listening.");
+    }
   }
 
   return { insights, recommendations };
 }
-
-function calculateListeningPatterns(audioFeatures: any): any {
-  if (!audioFeatures.audio_features || audioFeatures.audio_features.length === 0) {
-    return {
-      averageValence: 0.5,
-      averageEnergy: 0.5,
-      averageDanceability: 0.5,
-      averageTempo: 120,
-      averageAcousticness: 0.5,
-      averageInstrumentalness: 0.5
-    };
-  }
-
-  const features = audioFeatures.audio_features;
-  const total = features.length;
-
-  return {
-    averageValence: features.reduce((sum: number, f: any) => sum + (f.valence || 0), 0) / total,
-    averageEnergy: features.reduce((sum: number, f: any) => sum + (f.energy || 0), 0) / total,
-    averageDanceability: features.reduce((sum: number, f: any) => sum + (f.danceability || 0), 0) / total,
-    averageTempo: features.reduce((sum: number, f: any) => sum + (f.tempo || 120), 0) / total,
-    averageAcousticness: features.reduce((sum: number, f: any) => sum + (f.acousticness || 0), 0) / total,
-    averageInstrumentalness: features.reduce((sum: number, f: any) => sum + (f.instrumentalness || 0), 0) / total
-  };
-} 

@@ -169,10 +169,6 @@ export const spotifyLogin = async (req: express.Request, res: express.Response) 
 
   req.session!.spotifyState = state;
 
-  console.log('state', state);
-  console.log('isProduction', process.env.NODE_ENV === 'production');
-  console.log('redirect_uri', redirectUri);
-
   res.redirect(
     'https://accounts.spotify.com/authorize?' +
       querystring.stringify({
@@ -298,6 +294,30 @@ export const getTrackAudioFeatures = async (req: express.Request, res: express.R
 
   try {
     const response = await spotifyHelper.getAudioFeaturesById(trackId as string);
+    res.json(response);
+  } catch (error) {
+    return res.status(400).json({ error: 'Failed to get track audio features' });
+  }
+};
+
+export const getTracksAudioFeatures = async (req: express.Request, res: express.Response) => {
+  const { trackIds } = req.query;
+  if (!trackIds || (Array.isArray(trackIds) && trackIds.length === 0)) {
+    return res.status(400).json({ error: 'Track IDs must be provided' });
+  }
+
+  const spotifyHelper = res.locals.spotifyHelper;
+  if (!spotifyHelper) {
+    console.log('returning')
+    return res.status(400).json({ error: 'spotifyHelper not initialized' });
+  }
+
+  try {
+    // Convert to array and ensure all values are strings
+    const trackIdsArray = Array.isArray(trackIds) 
+      ? trackIds.map(id => String(id))
+      : [String(trackIds)];
+    const response = await spotifyHelper.getAudioFeaturesByIds(trackIdsArray);
     res.json(response);
   } catch (error) {
     return res.status(400).json({ error: 'Failed to get track audio features' });

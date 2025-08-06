@@ -12,6 +12,7 @@ import {
   PlayHistory,
 } from '../types/spotify/types';
 import { TrackAudioFeatures } from '../types/reccobeats/types';
+import spotify from '../router/spotify';
 
 export class SpotifyHelper {
   constructor(private spotifyApi: SpotifyApi) {}
@@ -271,7 +272,7 @@ export class SpotifyHelper {
           Accept: 'application/json',
         },
       });
-
+      
       if (!response.ok) {
         const errorText = await response.text();
         console.error('ReccoBeats API Error:', errorText);
