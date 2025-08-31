@@ -12,6 +12,21 @@ import { spotifyPollingService } from './services/spotifyPollingService';
 
 dotenv.config();
 
+// Validate critical environment variables
+const requiredEnvVars = ['MONGO_URL', 'SESSION_SECRET', 'FRONTEND_URL'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0) {
+  console.error('Missing required environment variables:', missingEnvVars);
+  console.error('Current env vars available:', Object.keys(process.env).filter(key => !key.startsWith('npm_')));
+  process.exit(1);
+}
+
+console.log('Environment validation passed');
+console.log('MongoDB URL configured:', !!process.env.MONGO_URL);
+console.log('Session secret configured:', !!process.env.SESSION_SECRET);
+console.log('Frontend URL:', process.env.FRONTEND_URL);
+
 const app = express();
 
 // Control what origins are allowed
@@ -92,6 +107,11 @@ app.use(
 app.use((req, res, next) => {
   req.url = req.url.replace(/\/+/g, '/');
   next();
+});
+
+// Simple health check that always works
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'Server is running', timestamp: new Date().toISOString() });
 });
 
 // Check to see if working
