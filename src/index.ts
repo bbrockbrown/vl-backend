@@ -140,13 +140,15 @@ mongoose.connection.on('error', (error: Error) => console.log(error));
 mongoose.connection.once('open', () => {
   console.log('Connected to MongoDB successfully!');
   
+  // TODO: Temporarily disable polling service to isolate crash issue
   // Start the Spotify polling service after a short delay to ensure everything is ready
-  setTimeout(() => {
-    spotifyPollingService.startPolling().catch(error => {
-      console.error('Failed to start Spotify polling service:', error);
-      // Don't exit on polling service failure - just log it
-    });
-  }, 2000); // 2 second delay
+  console.log('Spotify polling service temporarily disabled for debugging');
+  // setTimeout(() => {
+  //   spotifyPollingService.startPolling().catch(error => {
+  //     console.error('Failed to start Spotify polling service:', error);
+  //     // Don't exit on polling service failure - just log it
+  //   });
+  // }, 2000); // 2 second delay
 });
 
 const appRouter = router();
