@@ -96,7 +96,22 @@ app.use((req, res, next) => {
 
 // Check to see if working
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK #working' });
+  const health = {
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  };
+  res.status(200).json(health);
+});
+
+// Additional readiness check
+app.get('/ready', (req, res) => {
+  if (mongoose.connection.readyState === 1) {
+    res.status(200).json({ status: 'ready' });
+  } else {
+    res.status(503).json({ status: 'not ready', database: 'disconnected' });
+  }
 });
 
 
@@ -136,13 +151,39 @@ mongoose.connect(process.env.MONGO_URL, {
   socketTimeoutMS: 45000,
 });
 
-mongoose.connection.on('error', (error: Error) => console.log(error));
+mongoose.connection.on('error', (error: Error) => {
+  console.error('MongoDB connection error:', error);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('MongoDB reconnected');
+});
+
 mongoose.connection.once('open', () => {
   console.log('Connected to MongoDB successfully!');
   
   // TODO: Temporarily disable polling service to isolate crash issue
   // Start the Spotify polling service after a short delay to ensure everything is ready
   console.log('Spotify polling service temporarily disabled for debugging');
+  console.log('Server initialization complete');
+  
+  // Add a keep-alive mechanism to debug container lifecycle
+  let heartbeatCount = 0;
+  const heartbeatInterval = setInterval(() => {
+    heartbeatCount++;
+    console.log(`Server heartbeat ${heartbeatCount} - uptime: ${process.uptime().toFixed(0)}s`);
+    
+    // Stop heartbeat after 10 minutes to avoid log spam
+    if (heartbeatCount >= 120) { // 120 * 5s = 10 minutes
+      clearInterval(heartbeatInterval);
+      console.log('Heartbeat logging stopped');
+    }
+  }, 5000); // Every 5 seconds
+  
   // setTimeout(() => {
   //   spotifyPollingService.startPolling().catch(error => {
   //     console.error('Failed to start Spotify polling service:', error);
