@@ -152,6 +152,7 @@ export const spotifyCallback = async (req: express.Request, res: express.Respons
       // console.log("Cookie set with options:", cookieOptions);
       // console.log("Cookie value:", user.authentication.sessionToken);
     }
+    console.log(`redirecting to ${process.env.FRONTEND_URL}/quiz?success=true`)
     // Redirect to frontend
     res.redirect(`${process.env.FRONTEND_URL}/quiz?success=true`);
   } catch (error) {
@@ -165,7 +166,7 @@ export const spotifyLogin = async (req: express.Request, res: express.Response) 
   const scope =
     'user-read-private user-read-email user-read-recently-played user-top-read user-read-playback-state user-library-read playlist-read-private';
   const redirectUri = `${getApiUrl()}/auth/spotify/callback`;
-  // console.log("BASE API URL", getApiUrl())
+  console.log("redirecting to", redirectUri, "from spotfiyLogin")
 
   req.session!.spotifyState = state;
 
