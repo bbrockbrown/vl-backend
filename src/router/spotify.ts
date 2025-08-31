@@ -7,7 +7,8 @@ import {
   getUserRecentlyPlayed,
   getTrackAudioFeatures,
   getUserSavedTracks,
-  getTracksAudioFeatures
+  getTracksAudioFeatures,
+  manualSync
 } from '../controllers/spotify';
 import { isAuthenticated } from '../middleware';
 import { injectSpotifyApi } from '../middleware/spotify';
@@ -24,4 +25,5 @@ export default (router: express.Router) => {
   router.get('/spotify/audio-features', isAuthenticated, injectSpotifyApi, getTrackAudioFeatures);
   router.get('/spotify/multiple-audio-features', isAuthenticated, injectSpotifyApi, getTracksAudioFeatures);
   router.get('/spotify/saved-tracks', isAuthenticated, injectSpotifyApi, getUserSavedTracks);
+  router.post('/spotify/manual-sync', isAuthenticated, injectSpotifyApi, manualSync);
 };

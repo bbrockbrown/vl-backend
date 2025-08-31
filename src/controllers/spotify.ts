@@ -342,3 +342,39 @@ export const getUserSavedTracks = async (req: express.Request, res: express.Resp
     return res.status(400).json({ error: "Failed to get User's saved tracks" });
   }
 };
+
+export const manualSync = async (req: express.Request, res: express.Response) => {
+  try {
+    const user = req.identity;
+    if (!user) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    console.log(`Manual sync triggered for user: ${user._id}`);
+
+    // Get the Spotify API helper from middleware
+    const spotifyApi = res.locals.spotifyHelper;
+    if (!spotifyApi) {
+      return res.status(400).json({ error: 'Spotify API not available' });
+    }
+
+    // Get recently played tracks
+    const recentTracks = await spotifyApi.getUserRecentlyPlayed(50);
+    console.log(`Found ${recentTracks.length} recent tracks for user ${user._id}`);
+    
+    res.json({
+      success: true,
+      message: 'Manual sync completed - check server logs',
+      tracksFound: recentTracks.length,
+      latestTrack: recentTracks[0] ? {
+        name: recentTracks[0].track.name,
+        artist: recentTracks[0].track.artists[0].name,
+        playedAt: recentTracks[0].played_at
+      } : null
+    });
+
+  } catch (error) {
+    console.error('Manual sync error:', error);
+    return res.status(500).json({ error: "Failed to perform manual sync: " + (error as Error).message });
+  }
+};

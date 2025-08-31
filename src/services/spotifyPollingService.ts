@@ -21,7 +21,6 @@ class SpotifyPollingService {
 
   async startPolling() {
     if (this.isRunning) {
-      console.log('Spotify polling service is already running');
       return;
     }
 
@@ -49,7 +48,6 @@ class SpotifyPollingService {
   private async refreshUserToken(user: any): Promise<boolean> {
     try {
       if (!user.spotify?.refreshToken) {
-        console.log(`No refresh token for user ${user._id}`);
         return false;
       }
 
@@ -81,7 +79,6 @@ class SpotifyPollingService {
       user.spotify.tokenExpiresAt = new Date(Date.now() + expires_in * 1000);
       await user.save();
 
-      console.log(`Successfully refreshed token for user ${user._id}`);
       return true;
     } catch (error) {
       console.error(`Failed to refresh token for user ${user._id}:`, error);
@@ -91,13 +88,11 @@ class SpotifyPollingService {
 
   private async pollAllUsers(): Promise<void> {
     try {
-      console.log('Starting poll for all users...');
       const users = await getUsers();
       const results: PollingResult[] = [];
 
       for (const user of users) {
         if (!user.spotify?.accessToken) {
-          console.log(`Skipping user ${user._id} - no Spotify token`);
           continue;
         }
 
@@ -105,7 +100,6 @@ class SpotifyPollingService {
           const result = await this.pollUser(user);
           results.push(result);
         } catch (error) {
-          console.error(`Error polling user ${user._id}:`, error);
           results.push({
             userId: user._id.toString(),
             tracksProcessed: 0,
@@ -116,13 +110,12 @@ class SpotifyPollingService {
         }
       }
 
-      console.log('Polling results:', results);
     } catch (error) {
       console.error('Error in pollAllUsers:', error);
     }
   }
 
-  private async pollUser(user: any): Promise<PollingResult> {
+  public async pollUser(user: any): Promise<PollingResult> {
     const result: PollingResult = {
       userId: user._id.toString(),
       tracksProcessed: 0,
@@ -138,7 +131,6 @@ class SpotifyPollingService {
       const isExpired = tokenExpiry <= now;
 
       if (isExpired) {
-        console.log(`Token expired for user ${user._id}, refreshing...`);
         const refreshSuccess = await this.refreshUserToken(user);
         if (!refreshSuccess) {
           result.errors.push('Failed to refresh token');
@@ -164,7 +156,6 @@ class SpotifyPollingService {
       const recentlyPlayed = await spotifyApi.getUserRecentlyPlayed();
       
       if (!recentlyPlayed || recentlyPlayed.length === 0) {
-        console.log(`No recently played tracks for user ${user._id}`);
         return result;
       }
 
@@ -226,7 +217,6 @@ class SpotifyPollingService {
           // Check if session already exists (deduplication)
           const existingSession = await this.checkExistingSession(user._id, track.id, playedAt);
           if (existingSession) {
-            console.log(`Session already exists for track ${track.id} at ${playedAt}`);
             continue;
           }
 

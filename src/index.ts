@@ -81,18 +81,7 @@ app.use(
   })
 );
 
-// Runs whenever there is an error
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('ERROR DETAILS', {
-    message: err.message,
-    stack: err.stack,
-    status: err.status || 500,
-  });
-
-  res.status(err.status || 500).json({
-    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
-  });
-});
+// Error handling middleware will be added after routes
 
 // URL and slash management
 // EX: URL//users///8494583854 ==> URL/users/8494583854
@@ -105,6 +94,7 @@ app.use((req, res, next) => {
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK #working' });
 });
+
 
 if (process.env.NODE_ENV !== 'production') {
   console.log('CORS CONFIGURATION:', {
@@ -147,9 +137,23 @@ mongoose.connection.once('open', () => {
   console.log('Connected to MongoDB successfully!');
   
   // Start the Spotify polling service after database connection
-  // spotifyPollingService.startPolling().catch(error => {
-  //   console.error('Failed to start Spotify polling service:', error);
-  // });
+  spotifyPollingService.startPolling().catch(error => {
+    console.error('Failed to start Spotify polling service:', error);
+  });
 });
 
-app.use('/', router());
+const appRouter = router();
+app.use('/', appRouter);
+
+// Runs whenever there is an error - MUST be after all routes
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('ERROR DETAILS', {
+    message: err.message,
+    stack: err.stack,
+    status: err.status || 500,
+  });
+
+  res.status(err.status || 500).json({
+    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
+  });
+});

@@ -524,10 +524,6 @@ export const getConsolidatedAnalytics = async (req: express.Request, res: expres
     const endDate = new Date();
     const startDate = new Date();
 
-    console.log('=== getConsolidatedAnalytics Debug ===');
-    console.log('User ID:', user._id.toString());
-    console.log('Time Range:', timeRange);
-
     // Calculate start date based on time range
     switch (timeRange) {
       case '7d':
@@ -546,28 +542,22 @@ export const getConsolidatedAnalytics = async (req: express.Request, res: expres
         startDate.setDate(endDate.getDate() - 30);
     }
 
-    console.log('Start Date:', startDate.toISOString());
-    console.log('End Date:', endDate.toISOString());
-
     // Get listening sessions for the time range (consistent 1000 sessions)
     const sessions = await getListeningSessionsByUser(user._id.toString(), 1000);
     const filteredSessions = sessions.filter(s => 
       s.playedAt >= startDate && s.playedAt <= endDate
     );
-    console.log('Filtered sessions in time range:', filteredSessions.length);
 
     // Get unique track IDs and fetch tracks
     const trackIds = [...new Set(filteredSessions.map(s => s.trackId))];
     console.log('Unique track IDs:', trackIds.length);
     
     const tracks = await getTracksBySpotifyIds(trackIds);
-    console.log('Tracks fetched from DB:', tracks.length);
+    console.log('# Tracks fetched from DB:', tracks.length);
 
     // Enrich tracks with audio features and mood data (consistent enrichment)
     const spotifyHelper = res.locals.spotifyHelper;
-    console.log('Enriching tracks with audio features and mood...');
     const enrichedTracks = await enrichTracksWithAudioFeaturesAndMood(tracks, spotifyHelper);
-    console.log('Tracks after enrichment:', enrichedTracks.length);
 
     // 1. Overview Analytics
     const totalTracks = filteredSessions.length;
@@ -639,39 +629,79 @@ export const getConsolidatedAnalytics = async (req: express.Request, res: expres
       ? Math.round(tracksWithMood.reduce((sum, track) => sum + (track.mood?.valence || 0), 0) / tracksWithMood.length * 100) / 100
       : 0;
 
-    // 3. Listening Activity (monthly data for the time range)
-    const monthlyData = [];
-    const currentDate = new Date(startDate);
-    console.log('startDate', startDate);
-    console.log('endDate', endDate);
-    console.log('currentDate', currentDate)
+    // 3. Listening Activity (adaptive data based on time range)
+    const listeningActivityData = [];
     
-    while (currentDate <= endDate) {
-      const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-      const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    // For shorter time ranges (7d, 30d), use daily aggregation
+    // For longer time ranges (90d, 1y), use monthly aggregation
+    if (timeRange === '7d' || timeRange === '30d') {
+      // Daily aggregation
+      const currentDate = new Date(startDate);
+      console.log('Using DAILY aggregation for timeRange:', timeRange);
+      console.log('startDate', startDate);
+      console.log('endDate', endDate);
+      
+      while (currentDate <= endDate) {
+        const dayStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+        const dayEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + 1);
+        console.log("day start", dayStart);
+        console.log("day end", dayEnd);
+        
+        const daySessions = filteredSessions.filter(s => 
+          s.playedAt >= dayStart && s.playedAt < dayEnd
+        );
+        
+        const dayTracks = daySessions.length;
+        console.log("# tracks from day", dayTracks)
+        const dayDuration = daySessions.reduce((sum, session) => sum + (session.duration || 0), 0);
+        const dayHours = Math.round(dayDuration / (1000 * 60 * 60) * 10) / 10;
+        
+        listeningActivityData.push({
+          month: dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          tracks: dayTracks,
+          hours: dayHours
+        });
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    } else {
+      // Monthly aggregation
+      const currentDate = new Date(startDate);
+      console.log('Using MONTHLY aggregation for timeRange:', timeRange);
+      console.log('startDate', startDate);
+      console.log('endDate', endDate);
 
-      console.log('monthStart', monthStart);
-      console.log('monthEnd', monthEnd);
+      let monthsCounted = 0;
       
-      const monthSessions = filteredSessions.filter(s => 
-        s.playedAt >= monthStart && s.playedAt <= monthEnd
-      );
+      while (currentDate <= endDate) {
+        const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
-      console.log('monthSessions', monthSessions);
-      
-      const monthTracks = monthSessions.length;
-      const monthDuration = monthSessions.reduce((sum, session) => sum + (session.duration || 0), 0);
-      const monthHours = Math.round(monthDuration / (1000 * 60 * 60) * 10) / 10;
-      
-      monthlyData.push({
-        month: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        tracks: monthTracks,
-        hours: monthHours
-      });
-      
-      currentDate.setMonth(currentDate.getMonth() + 1);
-      currentDate.setDate(currentDate.getDate() - 2);
-      console.log("New currentDate", currentDate);
+        console.log('monthStart', monthStart);
+        console.log('monthEnd', monthEnd);
+        
+        const monthSessions = filteredSessions.filter(s => 
+          s.playedAt >= monthStart && s.playedAt <= monthEnd
+        );
+        
+        const monthTracks = monthSessions.length;
+        const monthDuration = monthSessions.reduce((sum, session) => sum + (session.duration || 0), 0);
+        const monthHours = Math.round(monthDuration / (1000 * 60 * 60) * 10) / 10;
+        
+        listeningActivityData.push({
+          month: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          tracks: monthTracks,
+          hours: monthHours
+        });
+        
+        // Move to next month properly
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        currentDate.setDate(1); // Reset to first day of the month
+        console.log("New currentDate", currentDate);
+        monthsCounted++;
+      }
+
+      console.log("counted months of data", monthsCounted);
     }
 
     // 4. Listening Patterns
@@ -776,7 +806,7 @@ export const getConsolidatedAnalytics = async (req: express.Request, res: expres
       moodDistribution,
       avgEnergy,
       avgValence,
-      listeningActivity: monthlyData,
+      listeningActivity: listeningActivityData,
       listeningPatterns,
       audioFeaturesCorrelation,
       audioFeaturesRadar,

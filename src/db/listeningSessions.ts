@@ -27,7 +27,7 @@ export const ListeningSessionModel = mongoose.model('ListeningSession', Listenin
 export const createListeningSession = (values: Record<string, any>) => 
   new ListeningSessionModel(values).save().then((session) => session.toObject());
 
-export const getListeningSessionsByUser = (userId: string, limit = 100) => 
+export const getListeningSessionsByUser = (userId: string, limit = 1000) => 
   ListeningSessionModel.find({ userId }).sort({ playedAt: -1 }).limit(limit);
 
 export const getListeningSessionsByDateRange = (userId: string, startDate: Date, endDate: Date) =>
