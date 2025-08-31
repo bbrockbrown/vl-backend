@@ -7,7 +7,7 @@ import mongoose from 'mongoose';
 import compression from 'compression';
 import router from './router';
 import session from 'express-session';
-import { injectSpotifyApi } from './middleware/spotify';
+import MongoStore from 'connect-mongo';
 import { spotifyPollingService } from './services/spotifyPollingService';
 
 dotenv.config();
@@ -72,6 +72,10 @@ app.use(
     secret: process.env.SESSION_SECRET!,
     resave: false,
     saveUninitialized: false,
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGO_URL!,
+      touchAfter: 24 * 3600 // lazy session update
+    }),
     cookie: {
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
@@ -106,7 +110,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 // PORT config
 const PORT = process.env.PORT || 5050;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`SERVER LISTENING ON PORT ${PORT}`);
   console.log(`SERVER ENVIRONMENT: ${process.env.NODE_ENV || 'development'}`);
   console.log(`FRONTEND URL: ${process.env.FRONTEND_URL}`);
@@ -155,5 +159,64 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
   res.status(err.status || 500).json({
     error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
+  });
+});
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  // Give time for logging then exit
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit for unhandled rejections, just log them
+});
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  
+  // Stop the polling service first
+  spotifyPollingService.stopPolling().catch(error => {
+    console.error('Error stopping polling service:', error);
+  });
+  
+  server.close(() => {
+    console.log('HTTP server closed');
+    
+    // Close database connection
+    mongoose.connection.close().then(() => {
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    }).catch((error) => {
+      console.error('Error closing MongoDB connection:', error);
+      process.exit(1);
+    });
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT signal received: closing HTTP server');
+  
+  // Stop the polling service first
+  spotifyPollingService.stopPolling().catch(error => {
+    console.error('Error stopping polling service:', error);
+  });
+  
+  server.close(() => {
+    console.log('HTTP server closed');
+    
+    // Close database connection
+    mongoose.connection.close().then(() => {
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    }).catch((error) => {
+      console.error('Error closing MongoDB connection:', error);
+      process.exit(1);
+    });
   });
 });
