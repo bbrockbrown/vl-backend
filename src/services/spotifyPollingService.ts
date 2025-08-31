@@ -27,12 +27,22 @@ class SpotifyPollingService {
     console.log('Starting Spotify polling service...');
     this.isRunning = true;
 
-    // Run initial poll
-    await this.pollAllUsers();
+    // Run initial poll with error handling
+    try {
+      await this.pollAllUsers();
+    } catch (error) {
+      console.error('Error in initial polling:', error);
+      // Continue anyway - don't let initial poll failure prevent service from starting
+    }
 
     // Set up interval for every 15 minutes
     this.pollInterval = setInterval(async () => {
-      await this.pollAllUsers();
+      try {
+        await this.pollAllUsers();
+      } catch (error) {
+        console.error('Error in scheduled polling:', error);
+        // Don't stop the service, just log the error
+      }
     }, 15 * 60 * 1000); // 15 minutes
   }
 

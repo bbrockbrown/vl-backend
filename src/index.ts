@@ -140,10 +140,13 @@ mongoose.connection.on('error', (error: Error) => console.log(error));
 mongoose.connection.once('open', () => {
   console.log('Connected to MongoDB successfully!');
   
-  // Start the Spotify polling service after database connection
-  spotifyPollingService.startPolling().catch(error => {
-    console.error('Failed to start Spotify polling service:', error);
-  });
+  // Start the Spotify polling service after a short delay to ensure everything is ready
+  setTimeout(() => {
+    spotifyPollingService.startPolling().catch(error => {
+      console.error('Failed to start Spotify polling service:', error);
+      // Don't exit on polling service failure - just log it
+    });
+  }, 2000); // 2 second delay
 });
 
 const appRouter = router();
@@ -176,47 +179,44 @@ process.on('unhandledRejection', (reason, promise) => {
   // Don't exit for unhandled rejections, just log them
 });
 
-// Graceful shutdown handling
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
+// Graceful shutdown handling with timeout
+const gracefulShutdown = (signal: string) => {
+  console.log(`${signal} signal received: starting graceful shutdown`);
   
-  // Stop the polling service first
-  spotifyPollingService.stopPolling().catch(error => {
-    console.error('Error stopping polling service:', error);
-  });
-  
-  server.close(() => {
-    console.log('HTTP server closed');
-    
-    // Close database connection
-    mongoose.connection.close().then(() => {
-      console.log('MongoDB connection closed');
-      process.exit(0);
-    }).catch((error) => {
-      console.error('Error closing MongoDB connection:', error);
-      process.exit(1);
-    });
-  });
-});
+  // Set a timeout to force exit if graceful shutdown takes too long
+  const shutdownTimeout = setTimeout(() => {
+    console.error('Graceful shutdown timed out, forcing exit');
+    process.exit(1);
+  }, 10000); // 10 seconds timeout
 
-process.on('SIGINT', () => {
-  console.log('SIGINT signal received: closing HTTP server');
-  
   // Stop the polling service first
-  spotifyPollingService.stopPolling().catch(error => {
-    console.error('Error stopping polling service:', error);
-  });
-  
-  server.close(() => {
-    console.log('HTTP server closed');
-    
-    // Close database connection
-    mongoose.connection.close().then(() => {
-      console.log('MongoDB connection closed');
-      process.exit(0);
-    }).catch((error) => {
+  Promise.all([
+    spotifyPollingService.stopPolling().catch(error => {
+      console.error('Error stopping polling service:', error);
+    }),
+    new Promise<void>((resolve) => {
+      server.close((err) => {
+        if (err) {
+          console.error('Error closing HTTP server:', err);
+        } else {
+          console.log('HTTP server closed');
+        }
+        resolve();
+      });
+    }),
+    mongoose.connection.close().catch(error => {
       console.error('Error closing MongoDB connection:', error);
-      process.exit(1);
-    });
+    })
+  ]).then(() => {
+    console.log('Graceful shutdown completed');
+    clearTimeout(shutdownTimeout);
+    process.exit(0);
+  }).catch((error) => {
+    console.error('Error during graceful shutdown:', error);
+    clearTimeout(shutdownTimeout);
+    process.exit(1);
   });
-});
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
